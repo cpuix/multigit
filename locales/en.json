@@ -1,0 +1,23 @@
+{
+  "system": {
+    "incorrect_command": "Incorrect command. Available commands: create, delete, copy, use",
+    "operation_cancelled": "\nOperation cancelled by user. No changes were made."
+  },
+  "input" : {
+    "account_name": "Enter account name:",
+    "email": "Enter user email:",
+    "confirm_delete": "This operation cannot be reversed. Do you want to continue? (y/n)"
+  },
+  "error": {
+    "invalid_account_name": "Invalid account name.",
+    "invalid_email": "Invalid email address.",
+    "key_file_not_found": "Key file not found."
+  },
+  "ssh": {
+    "key_exists": "A key file with this name already exists.",
+    "add_passphrase": "Do you want to add a passphrase to the key? (y/n):",
+    "created": "SSH keys (pub and sub) have been created and added to the config file. Don't forget to manually add the keys to your GitHub account.\n",
+    "copy_public_key": "Copied public key to clipboard.",
+    "deleted": "The key file and the entry in the config file have been deleted."
+  }
+}

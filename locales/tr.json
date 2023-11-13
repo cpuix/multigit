@@ -1,0 +1,6 @@
+{
+  "system": {
+    "incorrect_command": "Yanlış komut. Kullanılabilir komutlar: create, delete, copy, use",
+    "operation_cancelled": "\nİşlem iptal edildi. Herhangi bir değişiklik yapılmadı."
+  }
+}
