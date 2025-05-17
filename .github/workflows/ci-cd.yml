@@ -66,14 +66,11 @@ jobs:
         go-version: '1.21.x'
         check-latest: true
 
-    - name: Install golangci-lint
-      run: |
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GITHUB_WORKSPACE v1.56.2
-        echo "$GITHUB_WORKSPACE" >> $GITHUB_PATH
-
     - name: Run golangci-lint
-      run: |
-        golangci-lint run --fast --timeout=5m
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: v1.56.2
+        args: --fast --timeout=5m
 
     - name: Check formatting
       run: |
