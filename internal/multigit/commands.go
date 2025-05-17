@@ -5,8 +5,8 @@ import (
     "github.com/cpuix/multigit/internal/ssh"
 )
 
-func createSSHKey(accountName, accountEmail, passphrase string) {
-    ssh.CreateSSHKey(accountName, accountEmail, passphrase)
+func createSSHKey(accountName, accountEmail, passphrase string, keyType ssh.KeyType) {
+    ssh.CreateSSHKey(accountName, accountEmail, passphrase, keyType)
 }
 
 func addSSHKeyToAgent(accountName string) {

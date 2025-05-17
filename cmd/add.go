@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cpuix/multigit/internal/multigit"
+	"github.com/cpuix/multigit/internal/ssh"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +31,7 @@ This will:
 		}
 
 		// Create the account
-		if err := multigit.CreateAccount(accountName, accountEmail, passphrase); err != nil {
+		if err := multigit.CreateAccount(accountName, accountEmail, passphrase, ssh.KeyTypeED25519); err != nil {
 			return fmt.Errorf("failed to create account: %w", err)
 		}
 

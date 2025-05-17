@@ -25,11 +25,11 @@ func TestCreateAndDeleteSSHKey(t *testing.T) {
 
 	// Test key creation
 	t.Run("CreateSSHKey", func(t *testing.T) {
-		err := ssh.CreateSSHKey(accountName, accountEmail, passphrase)
+		err := ssh.CreateSSHKey(accountName, accountEmail, passphrase, ssh.KeyTypeED25519)
 		require.NoError(t, err, "Failed to create SSH key")
 
-		// Check if key files were created
-		privateKeyPath := filepath.Join(tempDir, ".ssh", "id_rsa_"+accountName)
+		// Check if key files were created (ED25519 keys)
+		privateKeyPath := filepath.Join(tempDir, ".ssh", "id_ed25519_"+accountName)
 		publicKeyPath := privateKeyPath + ".pub"
 
 		_, err = os.Stat(privateKeyPath)
@@ -44,8 +44,8 @@ func TestCreateAndDeleteSSHKey(t *testing.T) {
 		err := ssh.DeleteSSHKey(accountName)
 		require.NoError(t, err, "Failed to delete SSH key")
 
-		// Check if key files were deleted
-		privateKeyPath := filepath.Join(tempDir, ".ssh", "id_rsa_"+accountName)
+		// Check if key files were deleted (ED25519 keys)
+		privateKeyPath := filepath.Join(tempDir, ".ssh", "id_ed25519_"+accountName)
 		publicKeyPath := privateKeyPath + ".pub"
 
 		_, err = os.Stat(privateKeyPath)

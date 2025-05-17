@@ -5,6 +5,7 @@ MultiGit, birden fazla GitHub hesabı arasında kolayca geçiş yapmanızı sağ
 [![Go](https://github.com/cpuix/multigit/actions/workflows/test.yml/badge.svg)](https://github.com/cpuix/multigit/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/cpuix/multigit/graph/badge.svg?token=YOUR-TOKEN)](https://codecov.io/gh/cpuix/multigit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cpuix/multigit)](https://goreportcard.com/report/github.com/cpuix/multigit)
+[![Test Coverage](https://img.shields.io/badge/coverage-53.5%25-green)](https://github.com/cpuix/multigit/actions)
 
 ## Özellikler
 
@@ -14,7 +15,7 @@ MultiGit, birden fazla GitHub hesabı arasında kolayca geçiş yapmanızı sağ
 - 🔒 SSH anahtarlarını güvenli bir şekilde yönetme
 - ⚡ SSH config dosyasını otomatik olarak yönetme
 - 🎨 Renkli ve kullanıcı dostu arayüz
-- ✅ %85+ test kapsamı
+- ✅ %58.8+ test kapsamı (artırılmaya devam ediyor)
 
 ## Kurulum
 
@@ -111,7 +112,17 @@ Katkılarınızı bekliyoruz! Lütfen önce bir konu açarak neyi değiştirmek 
 
 ### Test Kapsamı
 
-Tüm yeni özellikler için birim testleri eklenmelidir. Test kapsamı en az %85 olmalıdır.
+Tüm yeni özellikler için birim testleri eklenmelidir. Mevcut test kapsamı %58.8'tir ve artırılmaya devam edilmektedir. Test kapsamını artırmak için çalışmalar sürmektedir.
+
+Testleri çalıştırmak için:
+
+```bash
+# Tüm testleri çalıştır
+make test
+
+# Test kapsamını görüntüle
+make cover
+```
 
 ## Lisans
 

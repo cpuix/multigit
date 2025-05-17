@@ -7,6 +7,7 @@ import (
 
 	"github.com/cpuix/multigit/cmd"
 	"github.com/cpuix/multigit/internal/multigit"
+	"github.com/cpuix/multigit/internal/ssh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -17,8 +18,9 @@ type MockSSH struct {
 	mock.Mock
 }
 
-func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string) error {
-	args := m.Called(accountName, email, passphrase)
+// CreateSSHKey mocks the CreateSSHKey function
+func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType ssh.KeyType) error {
+	args := m.Called(accountName, email, passphrase, keyType)
 	return args.Error(0)
 }
 
@@ -90,7 +92,7 @@ func TestCreateAccount(t *testing.T) {
 			passphrase:  "",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "new-account", "new@example.com", "").Return(nil)
+				m.On("CreateSSHKey", "new-account", "new@example.com", "", ssh.KeyTypeED25519).Return(nil)
 				m.On("AddSSHKeyToAgent", "new-account").Return(nil)
 				m.On("AddSSHConfigEntry", "new-account").Return(nil)
 			},
@@ -104,7 +106,7 @@ func TestCreateAccount(t *testing.T) {
 			passphrase:  "my-secure-passphrase",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "secure-account", "secure@example.com", "my-secure-passphrase").Return(nil)
+				m.On("CreateSSHKey", "secure-account", "secure@example.com", "my-secure-passphrase", ssh.KeyTypeED25519).Return(nil)
 				m.On("AddSSHKeyToAgent", "secure-account").Return(nil)
 				m.On("AddSSHConfigEntry", "secure-account").Return(nil)
 			},
@@ -137,7 +139,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "fail-key@example.com",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "fail-key-account", "fail-key@example.com", "").
+				m.On("CreateSSHKey", "fail-key-account", "fail-key@example.com", "", ssh.KeyTypeED25519).
 					Return(fmt.Errorf("ssh key creation failed"))
 			},
 			expectError: true,
@@ -150,7 +152,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "fail-agent@example.com",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "fail-agent-account", "fail-agent@example.com", "").Return(nil)
+				m.On("CreateSSHKey", "fail-agent-account", "fail-agent@example.com", "", ssh.KeyTypeED25519).Return(nil)
 				m.On("AddSSHKeyToAgent", "fail-agent-account").
 					Return(fmt.Errorf("failed to add to agent"))
 			},
@@ -164,7 +166,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "fail-config@example.com",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "fail-config-account", "fail-config@example.com", "").Return(nil)
+				m.On("CreateSSHKey", "fail-config-account", "fail-config@example.com", "", ssh.KeyTypeED25519).Return(nil)
 				m.On("AddSSHKeyToAgent", "fail-config-account").Return(nil)
 				m.On("AddSSHConfigEntry", "fail-config-account").
 					Return(fmt.Errorf("failed to add config entry"))
@@ -211,7 +213,7 @@ func TestCreateAccount(t *testing.T) {
 			defer func() { multigit.SSHClient = oldSSHClient }()
 
 			// Call the function
-			err := multigit.CreateAccount(tt.accountName, tt.email, tt.passphrase)
+			err := multigit.CreateAccount(tt.accountName, tt.email, tt.passphrase, ssh.KeyTypeED25519)
 
 			// Verify the result
 			if tt.expectError {

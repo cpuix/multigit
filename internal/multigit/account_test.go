@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cpuix/multigit/internal/multigit"
+	"github.com/cpuix/multigit/internal/ssh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -26,8 +27,9 @@ type MockSSH struct {
 	mock.Mock
 }
 
-func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string) error {
-	args := m.Called(accountName, email, passphrase)
+// CreateSSHKey mocks the CreateSSHKey function
+func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType ssh.KeyType) error {
+	args := m.Called(accountName, email, passphrase, keyType)
 	return args.Error(0)
 }
 
@@ -205,7 +207,7 @@ func TestCreateAccount(t *testing.T) {
 		saveConfigFunc func(Config) error
 		expectError    bool
 		errContains    string
-		setupMocks     func(*MockSSH, string, string, string)
+		setupMocks     func(*MockSSH, string, string, string, ssh.KeyType)
 		setup          func(*testing.T, *MockSSH)
 		skipSSH        bool
 	}{
@@ -222,8 +224,8 @@ func TestCreateAccount(t *testing.T) {
 				t.Logf("Updated testConfig: %+v", *testConfig)
 				return nil
 			},
-			setupMocks: func(m *MockSSH, accountName, email, passphrase string) {
-				m.On("CreateSSHKey", accountName, email, passphrase).Return(nil)
+			setupMocks: func(m *MockSSH, accountName, email, passphrase string, keyType ssh.KeyType) {
+				m.On("CreateSSHKey", accountName, email, passphrase, keyType).Return(nil)
 				m.On("AddSSHKeyToAgent", accountName).Return(nil)
 				m.On("AddSSHConfigEntry", accountName).Return(nil)
 			},
@@ -243,8 +245,8 @@ func TestCreateAccount(t *testing.T) {
 				t.Logf("Updated testConfig: %+v", *testConfig)
 				return nil
 			},
-			setupMocks: func(m *MockSSH, name, email, passphrase string) {
-				m.On("CreateSSHKey", name, email, passphrase).Return(nil)
+			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
+				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(nil)
 				m.On("AddSSHConfigEntry", name).Return(nil)
 			},
@@ -276,8 +278,8 @@ func TestCreateAccount(t *testing.T) {
 			saveConfigFunc: func(c Config) error {
 				return errors.New("failed to save config")
 			},
-			setupMocks: func(m *MockSSH, name, email, passphrase string) {
-				m.On("CreateSSHKey", name, email, passphrase).Return(nil)
+			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
+				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(nil)
 				m.On("AddSSHConfigEntry", name).Return(nil)
 			},
@@ -301,7 +303,7 @@ func TestCreateAccount(t *testing.T) {
 
 			// Setup test-specific mocks if not skipped
 			if !tt.skipSSH && tt.setupMocks != nil {
-				tt.setupMocks(mockSSH, tt.accountName, tt.email, tt.passphrase)
+				tt.setupMocks(mockSSH, tt.accountName, tt.email, tt.passphrase, ssh.KeyTypeED25519)
 			}
 
 			// Initialize test config before each test case
@@ -344,11 +346,11 @@ func TestCreateAccount(t *testing.T) {
 				var err error
 				if tt.saveConfigFunc != nil {
 					t.Logf("Creating account with saveConfigFunc")
-					err = multigit.CreateAccount(tt.accountName, tt.email, tt.passphrase, tt.saveConfigFunc)
+					err = multigit.CreateAccount(tt.accountName, tt.email, tt.passphrase, ssh.KeyTypeED25519, tt.saveConfigFunc)
 					t.Logf("After CreateAccount with saveConfigFunc, err: %v", err)
 				} else {
 					t.Logf("Creating account without saveConfigFunc")
-					err = multigit.CreateAccount(tt.accountName, tt.email, tt.passphrase, saveTestConfig)
+					err = multigit.CreateAccount(tt.accountName, tt.email, tt.passphrase, ssh.KeyTypeED25519, saveTestConfig)
 					t.Logf("After CreateAccount with saveTestConfig, err: %v", err)
 				}
 

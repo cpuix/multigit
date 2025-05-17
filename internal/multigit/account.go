@@ -35,7 +35,7 @@ type Config struct {
 var SSHClient ssh.SSHOperations = &ssh.DefaultSSH{}
 
 // CreateAccount creates a new GitHub account with SSH key and configures it
-func CreateAccount(accountName, accountEmail, passphrase string, saveConfigFunc ...func(Config) error) error {
+func CreateAccount(accountName, accountEmail, passphrase string, keyType ssh.KeyType, saveConfigFunc ...func(Config) error) error {
 	// Input validation
 	if accountName == "" {
 		return fmt.Errorf("account name cannot be empty")
@@ -56,7 +56,7 @@ func CreateAccount(accountName, accountEmail, passphrase string, saveConfigFunc 
 	}
 
 	// Create SSH key pair
-	if err := SSHClient.CreateSSHKey(accountName, accountEmail, passphrase); err != nil {
+	if err := SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType); err != nil {
 		return fmt.Errorf("failed to create SSH key: %w", err)
 	}
 
