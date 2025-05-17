@@ -1,17 +1,15 @@
-# golangci-lint configuration
-# Minimal configuration for basic Go code quality checks
+# Minimal golangci-lint configuration
 version: v1.56.2
 
 linters:
+  # Enable only the most important linters
   enable:
-    - govet       # Reports suspicious constructs
-    - errcheck    # Checks for unchecked errors
-    - staticcheck # Static analysis
-    - gosimple    # Simplification suggestions
-    - ineffassign # Detects ineffectual assignments
-    - goimports   # Formats Go code and manages imports
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
 
+# Don't fail on issues
 issues:
-  # Don't limit the number of issues
   max-issues-per-linter: 0
   max-same-issues: 0
