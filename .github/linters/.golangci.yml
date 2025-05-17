@@ -1,0 +1,19 @@
+# golangci-lint configuration
+# See https://golangci-lint.run/configuration/
+version: v1.56.2
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - staticcheck
+    - typecheck
+    - unused
+    - gosimple
+    - ineffassign
+    - errcheck
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
