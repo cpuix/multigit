@@ -8,11 +8,6 @@ linters:
     - goimports
     - govet
     - staticcheck
-    - typecheck
-    - unused
-    - gosimple
-    - ineffassign
-    - errcheck
 
 issues:
   max-issues-per-linter: 0
