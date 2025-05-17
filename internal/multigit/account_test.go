@@ -31,6 +31,7 @@ func TestAccountManagement(t *testing.T) {
 				},
 			},
 			ActiveAccount: accountName,
+			Profiles:      make(map[string]multigit.Profile),
 		}
 
 		// Save config

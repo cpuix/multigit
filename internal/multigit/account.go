@@ -30,30 +30,37 @@ type Config struct {
 	ActiveProfile string                 `json:"active_profile"`
 }
 
+// SSHClient is the interface for SSH operations
+var SSHClient ssh.SSHOperations = &ssh.DefaultSSH{}
+
 // CreateAccount creates a new GitHub account with SSH key and configures it
 func CreateAccount(accountName, accountEmail, passphrase string) error {
+	// Check if account already exists
+	config := LoadConfig()
+	if _, exists := config.Accounts[accountName]; exists {
+		return fmt.Errorf("account '%s' already exists", accountName)
+	}
+
 	// Create SSH key pair
-	if err := ssh.CreateSSHKey(accountName, accountEmail, passphrase); err != nil {
+	if err := SSHClient.CreateSSHKey(accountName, accountEmail, passphrase); err != nil {
 		return fmt.Errorf("failed to create SSH key: %w", err)
 	}
 
 	// Add SSH key to agent
-	if err := ssh.AddSSHKeyToAgent(accountName); err != nil {
+	if err := SSHClient.AddSSHKeyToAgent(accountName); err != nil {
 		return fmt.Errorf("failed to add SSH key to agent: %w", err)
 	}
 
 	// Add SSH config entry
-	if err := ssh.AddSSHConfigEntry(accountName); err != nil {
+	if err := SSHClient.AddSSHConfigEntry(accountName); err != nil {
 		return fmt.Errorf("failed to add SSH config entry: %w", err)
 	}
 
-	// Load or create config
-	config := LoadConfig()
+	// Add or update account in config
 	if config.Accounts == nil {
 		config.Accounts = make(map[string]Account)
 	}
 
-	// Add or update account
 	config.Accounts[accountName] = Account{
 		Name:  accountName,
 		Email: accountEmail,
@@ -78,13 +85,14 @@ func DeleteAccount(accountName string) error {
 		return fmt.Errorf("account '%s' does not exist", accountName)
 	}
 
-	// Remove SSH key and config entry
-	if err := ssh.DeleteSSHKey(accountName); err != nil {
-		return fmt.Errorf("failed to delete SSH key: %w", err)
+	// Remove SSH key pair
+	if err := SSHClient.DeleteSSHKey(accountName); err != nil {
+		log.Printf("Warning: Failed to delete SSH key: %v", err)
 	}
 
-	if err := ssh.RemoveSSHConfigEntry(accountName); err != nil {
-		return fmt.Errorf("failed to remove SSH config entry: %w", err)
+	// Remove SSH config entry
+	if err := SSHClient.RemoveSSHConfigEntry(accountName); err != nil {
+		log.Printf("Warning: Failed to remove SSH config entry: %v", err)
 	}
 
 	// Remove account from config
@@ -119,6 +127,21 @@ func getConfigPath() (string, error) {
 		return "", fmt.Errorf("failed to get user home directory: %v", err)
 	}
 	return filepath.Join(home, ".config", "multigit", "config.json"), nil
+}
+
+// LoadConfigFromFile loads the configuration from a specific file
+func LoadConfigFromFile(filePath string) (*Config, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	return &config, nil
 }
 
 // LoadConfig loads the multigit configuration from disk
@@ -159,17 +182,21 @@ func LoadConfig() Config {
 	return config
 }
 
-// SaveConfig saves the multigit configuration to disk
+// SaveConfig saves the multigit configuration to the default location
 func SaveConfig(config Config) error {
-	configPath, err := getConfigPath()
+	filePath, err := getConfigPath()
 	if err != nil {
-		return fmt.Errorf("failed to get config path: %v", err)
+		return fmt.Errorf("failed to get config path: %w", err)
 	}
+	return SaveConfigToFile(config, filePath)
+}
 
+// SaveConfigToFile saves the configuration to a specific file
+func SaveConfigToFile(config Config, filePath string) error {
 	// Create config directory if it doesn't exist
-	configDir := filepath.Dir(configPath)
+	configDir := filepath.Dir(filePath)
 	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return fmt.Errorf("failed to create config directory: %v", err)
+		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
 	// Ensure active profile exists if set
@@ -189,12 +216,12 @@ func SaveConfig(config Config) error {
 	// Marshal config
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %v", err)
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	// Write to file
-	if err := os.WriteFile(configPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %v", err)
+	if err := os.WriteFile(filePath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	return nil

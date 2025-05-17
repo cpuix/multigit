@@ -49,6 +49,6 @@ This will:
 }
 
 func init() {
-	rootCmd.AddCommand(deleteCmd)
-	deleteCmd.Flags().BoolVarP(&forceDelete, "force", "f", false, "Skip confirmation prompt")
+	RootCmd.AddCommand(deleteCmd)
+	deleteCmd.Flags().BoolP("force", "f", false, "Force deletion without confirmation")
 }

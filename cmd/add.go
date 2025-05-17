@@ -45,6 +45,6 @@ This will:
 }
 
 func init() {
-	rootCmd.AddCommand(createCmd)
+	RootCmd.AddCommand(createCmd)
 	createCmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "Passphrase for the SSH key (recommended for security)")
 }

@@ -133,7 +133,7 @@ var deleteProfileCmd = &cobra.Command{
 
 		// Ask for confirmation
 		if !profileForceDelete {
-			if !confirm(fmt.Sprintf("Are you sure you want to delete profile '%s'?", profileName)) {
+			if !Confirm(fmt.Sprintf("Are you sure you want to delete profile '%s'?", profileName)) {
 				return nil
 			}
 		}
@@ -162,20 +162,18 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(profileCmd)
-	profileCmd.AddCommand(createProfileCmd)
-	profileCmd.AddCommand(listProfilesCmd)
-	profileCmd.AddCommand(useProfileCmd)
-	profileCmd.AddCommand(deleteProfileCmd)
+	RootCmd.AddCommand(profileCmd)
+	profileCmd.AddCommand(createProfileCmd, listProfilesCmd, useProfileCmd, deleteProfileCmd)
 
 	// Add flags
-	deleteProfileCmd.Flags().BoolVarP(&forceDelete, "force", "f", false, "force deletion without confirmation")
+	deleteProfileCmd.Flags().BoolVarP(&profileForceDelete, "force", "f", false, "force deletion without confirmation")
 }
 
-// confirm shows a prompt with question and waits for user confirmation
-type confirmFunc func(string) bool
+// ConfirmFunc defines the function type for confirmation prompts
+type ConfirmFunc func(string) bool
 
-var confirm confirmFunc = func(question string) bool {
+// Confirm is the function used to prompt for user confirmation
+var Confirm ConfirmFunc = func(question string) bool {
 	var response string
 	fmt.Printf("%s [y/N]: ", question)
 	_, err := fmt.Scanln(&response)
