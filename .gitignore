@@ -1,2 +1,50 @@
-.idea
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE specific files
+.idea/
+.vscode/
+.fleet/
+*.swp
+*.swo
+*~
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Go workspace file
+go.work
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+coverage.out
+
+# Dependency directories
+vendor/
+
+# Environment files
+.env
+
+# Local development config
+config.local.json
+
+# Build output
+bin/
+dist/
+
+# Logs
+*.log
