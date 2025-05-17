@@ -1,4 +1,4 @@
-package multigit
+package main
 
 import "github.com/cpuix/multigit/cmd"
 
