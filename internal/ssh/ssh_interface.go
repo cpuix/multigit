@@ -13,7 +13,9 @@ const (
 // SSHOperations defines the interface for SSH-related operations
 type SSHOperations interface {
 	CreateSSHKey(accountName, email, passphrase string, keyType KeyType) error
-	AddSSHKeyToAgent(accountName string) error
+	// AddSSHKeyToAgent adds an SSH key to the agent. If keyFile is provided, it will be used directly.
+	// Otherwise, it will look for the key in ~/.ssh/id_ed25519_{accountName}
+	AddSSHKeyToAgent(accountOrKeyFile string) error
 	AddSSHConfigEntry(accountName string) error
 	DeleteSSHKey(accountName string) error
 	RemoveSSHConfigEntry(accountName string) error
@@ -28,8 +30,9 @@ func (d *DefaultSSH) CreateSSHKey(accountName, email, passphrase string, keyType
 }
 
 // AddSSHKeyToAgent adds the SSH key to the SSH agent
-func (d *DefaultSSH) AddSSHKeyToAgent(accountName string) error {
-	return AddSSHKeyToAgent(accountName)
+// accountOrKeyFile can be either an account name or a direct path to the private key file
+func (d *DefaultSSH) AddSSHKeyToAgent(accountOrKeyFile string) error {
+	return AddSSHKeyToAgent(accountOrKeyFile)
 }
 
 // AddSSHConfigEntry adds an entry to the SSH config file

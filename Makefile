@@ -1,4 +1,4 @@
-.PHONY: test cover lint build clean
+.PHONY: test test-integration cover lint build clean
 
 # Go parameters
 GOCMD=go
@@ -11,10 +11,15 @@ BINARY_NAME=multigit
 
 all: test build
 
-# Run tests
+# Run tests (unit tests only)
 TEST_PACKAGES=./...
 test:
-	$(GOTEST) -v -coverprofile=coverage.out $(TEST_PACKAGES)
+	$(GOTEST) -v -short -coverprofile=coverage.out $(TEST_PACKAGES)
+
+# Run integration tests
+test-integration:
+	@echo "Running integration tests..."
+	$(GOTEST) -v -tags=integration -coverprofile=coverage.integration.out ./...
 
 # Show test coverage in browser
 cover: test
