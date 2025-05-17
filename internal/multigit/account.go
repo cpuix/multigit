@@ -3,6 +3,7 @@ package multigit
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"log"
 	"os"
 	"path/filepath"
@@ -18,23 +19,36 @@ type Account struct {
 
 // Profile represents a collection of accounts
 type Profile struct {
-	Name     string         `json:"name"`
+	Name     string          `json:"name"`
 	Accounts map[string]bool `json:"accounts"` // map[accountName]enabled
 }
 
 // Config represents the multigit configuration
 type Config struct {
-	Accounts      map[string]Account      `json:"accounts"`
-	ActiveAccount string                 `json:"active_account"`
-	Profiles      map[string]Profile     `json:"profiles"`
-	ActiveProfile string                 `json:"active_profile"`
+	Accounts      map[string]Account `json:"accounts"`
+	ActiveAccount string             `json:"active_account"`
+	Profiles      map[string]Profile `json:"profiles"`
+	ActiveProfile string             `json:"active_profile"`
 }
 
 // SSHClient is the interface for SSH operations
 var SSHClient ssh.SSHOperations = &ssh.DefaultSSH{}
 
 // CreateAccount creates a new GitHub account with SSH key and configures it
-func CreateAccount(accountName, accountEmail, passphrase string) error {
+func CreateAccount(accountName, accountEmail, passphrase string, saveConfigFunc ...func(Config) error) error {
+	// Input validation
+	if accountName == "" {
+		return fmt.Errorf("account name cannot be empty")
+	}
+
+	if accountEmail == "" {
+		return fmt.Errorf("email cannot be empty")
+	}
+
+	if !strings.Contains(accountEmail, "@") {
+		return fmt.Errorf("invalid email format")
+	}
+
 	// Check if account already exists
 	config := LoadConfig()
 	if _, exists := config.Accounts[accountName]; exists {
@@ -67,7 +81,11 @@ func CreateAccount(accountName, accountEmail, passphrase string) error {
 	}
 
 	// Save config
-	if err := SaveConfig(config); err != nil {
+	saveFunc := SaveConfig
+	if len(saveConfigFunc) > 0 {
+		saveFunc = saveConfigFunc[0]
+	}
+	if err := saveFunc(config); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
@@ -183,12 +201,12 @@ func LoadConfig() Config {
 }
 
 // SaveConfig saves the multigit configuration to the default location
-func SaveConfig(config Config) error {
-	filePath, err := getConfigPath()
+var SaveConfig = func(config Config) error {
+	configPath, err := getConfigPath()
 	if err != nil {
 		return fmt.Errorf("failed to get config path: %w", err)
 	}
-	return SaveConfigToFile(config, filePath)
+	return SaveConfigToFile(config, configPath)
 }
 
 // SaveConfigToFile saves the configuration to a specific file
