@@ -60,13 +60,21 @@ jobs:
       with:
         go-version: '1.21.x'
 
-    - name: Run golangci-lint
+    - name: Run basic Go checks
       run: |
-        # Install golangci-lint
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
+        # Check formatting
+        gofmt -l -s . | grep -v vendor/ | tee /dev/stderr | (! grep . )
         
-        # Run linter with minimal configuration
-        golangci-lint run --no-config --disable-all -E goimports -E govet -E errcheck -E staticcheck --timeout 5m
+        # Run vet
+        go vet ./...
+        
+        # Check for common errors
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+        staticcheck ./...
+        
+        # Check for unused dependencies
+        go mod tidy
+        git diff --exit-code
 
     - name: Check formatting
       run: |
