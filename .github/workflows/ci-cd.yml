@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go: ['1.21.x']
+        go: ['1.23.x']
     steps:
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -28,6 +28,7 @@ jobs:
     - name: Clear Go modules cache
       run: |
         rm -rf ~/go/pkg/mod ~/go/bin
+        mkdir -p ~/go/pkg/mod ~/go/bin
 
     - name: Cache Go modules
       uses: actions/cache@v3
@@ -44,7 +45,11 @@ jobs:
         # Format all Go files
         gofmt -w .
         # Check if there are any uncommitted changes
-        git diff --exit-code || (echo "Files were not properly formatted. Run 'gofmt -w .' locally and commit the changes." && exit 1)
+        if ! git diff --exit-code; then
+          echo "Files were not formatted correctly. Run 'gofmt -w .' locally and commit the changes."
+          git diff
+          exit 1
+        fi
 
     - name: Run unit tests with coverage
       run: |
@@ -74,7 +79,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21.x'
+        go-version: '1.23.x'  # Updated to match test job
 
     - name: Run Go vet
       run: go vet ./...
@@ -86,6 +91,7 @@ jobs:
         if [ ! -z "$unformatted" ]; then
           echo "Unformatted files found:"
           echo "$unformatted"
+          echo "Run 'gofmt -w .' locally and commit the changes."
           exit 1
         fi
 
@@ -108,7 +114,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21.x'
+        go-version: '1.23.x'  # Updated to match other jobs
 
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@v5
