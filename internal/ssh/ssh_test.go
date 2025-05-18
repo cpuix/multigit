@@ -47,7 +47,7 @@ func TestHelperProcess(t *testing.T) {
 
 func TestCreateAndDeleteSSHKey(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Override the home directory for testing
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tempDir)
@@ -152,7 +152,7 @@ func TestCreateSSHKey(t *testing.T) {
 			// Create a temporary directory for this test case
 			tempDir := t.TempDir()
 			keyFile := filepath.Join(tempDir, "id_"+tt.keyType)
-			
+
 			// Create .ssh directory
 			sshDir := filepath.Join(tempDir, ".ssh")
 			require.NoError(t, os.MkdirAll(sshDir, 0700), "Failed to create .ssh directory")
@@ -163,33 +163,33 @@ func TestCreateSSHKey(t *testing.T) {
 			defer os.Setenv("HOME", oldHome)
 
 			err := ssh.CreateSSHKey("test-account", "test@example.com", keyFile, ssh.KeyType(tt.keyType))
-			
+
 			if tt.expectError {
 				require.Error(t, err, "Expected error but got none")
 				return
 			}
-			
+
 			require.NoError(t, err, "Failed to create SSH key")
-			
+
 			// Verify key files exist at the specified location
 			require.FileExists(t, keyFile, "Private key file should exist at the specified location")
 			require.FileExists(t, keyFile+".pub", "Public key file should exist at the specified location")
-			
+
 			// Verify the key files contain valid content
 			privateKey, err := os.ReadFile(keyFile)
 			require.NoError(t, err, "Failed to read private key file")
 			require.True(t, len(privateKey) > 0, "Private key file should not be empty")
-			
+
 			publicKey, err := os.ReadFile(keyFile + ".pub")
 			require.NoError(t, err, "Failed to read public key file")
 			require.True(t, len(publicKey) > 0, "Public key file should not be empty")
-			
+
 			// Verify the public key starts with the correct prefix
 			if tt.keyType == "rsa" {
-				require.True(t, strings.HasPrefix(string(publicKey), "ssh-rsa "), 
+				require.True(t, strings.HasPrefix(string(publicKey), "ssh-rsa "),
 					"RSA public key should start with 'ssh-rsa'")
 			} else if tt.keyType == "ed25519" {
-				require.True(t, strings.HasPrefix(string(publicKey), "ssh-ed25519 "), 
+				require.True(t, strings.HasPrefix(string(publicKey), "ssh-ed25519 "),
 					"ED25519 public key should start with 'ssh-ed25519'")
 			}
 		})
@@ -275,13 +275,13 @@ func TestDeleteSSHKey(t *testing.T) {
 				// Create both RSA and ED25519 keys for the same account
 				rsaKeyFile := filepath.Join(tempDir, "id_rsa_multi-account")
 				ed25519KeyFile := filepath.Join(tempDir, "id_ed25519_multi-account")
-				
+
 				err := ssh.CreateSSHKey("multi-account", "test@example.com", rsaKeyFile, ssh.KeyTypeRSA)
 				require.NoError(t, err, "Failed to create RSA test key")
-				
+
 				err = ssh.CreateSSHKey("multi-account", "test@example.com", ed25519KeyFile, ssh.KeyTypeED25519)
 				require.NoError(t, err, "Failed to create ED25519 test key")
-				
+
 				return "multi-account", []string{
 					rsaKeyFile,
 					rsaKeyFile + ".pub",
@@ -299,20 +299,20 @@ func TestDeleteSSHKey(t *testing.T) {
 				keyFile := filepath.Join(tempDir, "id_rsa_protected")
 				err := ssh.CreateSSHKey("protected-account", "test@example.com", keyFile, ssh.KeyTypeRSA)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Make the directory read-only to prevent file deletion
 				err = os.Chmod(tempDir, 0555) // Read and execute, no write
 				require.NoError(t, err, "Failed to set directory permissions")
-				
+
 				t.Cleanup(func() {
 					// Restore permissions for cleanup
 					os.Chmod(tempDir, 0700)
 				})
-				
+
 				// Verify the files exist and are not writable
 				_, err = os.Stat(keyFile)
 				require.NoError(t, err, "Key file should exist")
-				
+
 				return keyFile, []string{
 					keyFile,
 					keyFile + ".pub",
@@ -330,7 +330,7 @@ func TestDeleteSSHKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := t.TempDir()
-			
+
 			// Override home directory for this test
 			oldHome := os.Getenv("HOME")
 			os.Setenv("HOME", tempDir)
@@ -381,7 +381,7 @@ func TestDeleteSSHKey(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, deleteErr, "Unexpected error deleting SSH key")
-				
+
 				// Verify files were deleted
 				for _, file := range filesToCheck {
 					_, err := os.Stat(file)
@@ -554,20 +554,20 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				keyFile := filepath.Join(tempDir, "id_rsa_protected")
 				err := ssh.CreateSSHKey("protected-account", "test@example.com", keyFile, ssh.KeyTypeRSA)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Make the directory read-only to prevent file deletion
 				err = os.Chmod(tempDir, 0555) // Read and execute, no write
 				require.NoError(t, err, "Failed to set directory permissions")
-				
+
 				t.Cleanup(func() {
 					// Restore permissions for cleanup
 					os.Chmod(tempDir, 0700)
 				})
-				
+
 				// Verify the files exist and are not writable
 				_, err = os.Stat(keyFile)
 				require.NoError(t, err, "Key file should exist")
-				
+
 				return keyFile, []string{
 					keyFile,
 					keyFile + ".pub",
@@ -581,7 +581,7 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := t.TempDir()
-			
+
 			// Setup test case
 			keyFile, filesToCheck := tt.setup(t, tempDir)
 
@@ -627,7 +627,7 @@ func contains(slice []string, s string) bool {
 
 func TestAddSSHKeyToAgent(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Override the home directory for testing
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tempDir)
@@ -640,11 +640,11 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 	// Test account details
 	accountName := "test-agent-account"
 	keyFile := filepath.Join(sshDir, "id_ed25519_"+accountName)
-	
+
 	// Save original ExecCommand and restore it after the test
 	oldExecCommand := ssh.ExecCommand
 	defer func() { ssh.ExecCommand = oldExecCommand }()
-	
+
 	// Set SSH_AUTH_SOCK for agent tests
 	oldSSHAuthSock := os.Getenv("SSH_AUTH_SOCK")
 	defer os.Setenv("SSH_AUTH_SOCK", oldSSHAuthSock)
@@ -661,7 +661,7 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 				// Create a test private key file
 				err := ssh.CreateSSHKey(accountName, "test@example.com", keyFile, ssh.KeyTypeED25519)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Mock successful ssh-add command
 				ssh.ExecCommand = mockCommand("ssh-add", true)
 			},
@@ -686,10 +686,10 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 				// Create a test private key file
 				err := ssh.CreateSSHKey(accountName, "test@example.com", keyFile, ssh.KeyTypeED25519)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Mock failing ssh-add command
 				ssh.ExecCommand = mockCommand("ssh-add", false)
-				
+
 				// Set SSH_AUTH_SOCK to simulate running agent
 				os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
 			},
@@ -701,10 +701,10 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 				// Create a test private key file
 				err := ssh.CreateSSHKey(accountName, "test@example.com", keyFile, ssh.KeyTypeED25519)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Mock failing ssh-add command
 				ssh.ExecCommand = mockCommand("ssh-add", false)
-				
+
 				// Set SSH_AUTH_SOCK to simulate running agent
 				os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
 			},
@@ -716,10 +716,10 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup test case
 			tc.setup()
-			
+
 			// Run the function
 			err := ssh.AddSSHKeyToAgent(accountName)
-			
+
 			// Verify results
 			if tc.expectedError != "" {
 				require.Error(t, err, "Expected error but got none")

@@ -62,7 +62,6 @@ func marshalED25519PrivateKey(key ed25519.PrivateKey, comment string) []byte {
 	}
 	keyData.PubKey = ssh.Marshal(pubKeyData)
 
-
 	// Private key block
 	privKeyData := struct {
 		Check1  uint64
@@ -317,11 +316,11 @@ func AddSSHConfigEntry(accountName string) error {
 	}
 
 	sshConfigFile := filepath.Join(homeDir, ".ssh", "config")
-	
+
 	// Check for both RSA and ED25519 key files
 	rsaKeyFile := filepath.Join(homeDir, ".ssh", fmt.Sprintf("id_rsa_%s", accountName))
 	ed25519KeyFile := filepath.Join(homeDir, ".ssh", fmt.Sprintf("id_ed25519_%s", accountName))
-	
+
 	var privateKeyFile string
 	if _, err := os.Stat(rsaKeyFile); err == nil {
 		privateKeyFile = rsaKeyFile
@@ -341,7 +340,7 @@ func AddSSHConfigEntry(accountName string) error {
 	}
 
 	hostPattern := fmt.Sprintf("github.com-%s", accountName)
-	
+
 	// Check if host already exists in config
 	if containsHost(string(configData), hostPattern) {
 		return fmt.Errorf("SSH config entry for %s already exists", accountName)
@@ -349,12 +348,12 @@ func AddSSHConfigEntry(accountName string) error {
 
 	hostEntry := fmt.Sprintf(
 		"\n# Multigit managed config for %s\n"+
-		"Host %s\n"+
-		"\tHostName github.com\n"+
-		"\tUser git\n"+
-		"\tIdentityFile %s\n"+
-		"\tIdentitiesOnly yes\n"+
-		"# End of Multigit config for %s\n",
+			"Host %s\n"+
+			"\tHostName github.com\n"+
+			"\tUser git\n"+
+			"\tIdentityFile %s\n"+
+			"\tIdentitiesOnly yes\n"+
+			"# End of Multigit config for %s\n",
 		accountName, hostPattern, privateKeyFile, accountName,
 	)
 
@@ -430,7 +429,7 @@ func DeleteSSHKey(accountOrKeyFile string) error {
 		// Try with full account name first
 		keyFile := filepath.Join(sshDir, fmt.Sprintf(pattern, accountOrKeyFile))
 		keyFiles = append(keyFiles, keyFile, keyFile+".pub")
-		
+
 		// Then try with just the base name
 		if accountName != accountOrKeyFile {
 			keyFile = filepath.Join(sshDir, fmt.Sprintf(pattern, accountName))
@@ -441,7 +440,7 @@ func DeleteSSHKey(accountOrKeyFile string) error {
 	// Remove all key files
 	var lastErr error
 	dedupedFiles := make(map[string]bool)
-	
+
 	for _, keyFile := range keyFiles {
 		if keyFile == "" {
 			continue
@@ -456,7 +455,7 @@ func DeleteSSHKey(accountOrKeyFile string) error {
 				fmt.Printf("File %s does not exist, skipping\n", keyFile)
 				continue
 			}
-			
+
 			// File exists, try to delete it
 			fmt.Printf("Attempting to delete key file: %s\n", keyFile)
 			err := DeleteSSHKeyFile(keyFile)
@@ -562,10 +561,10 @@ func RemoveSSHConfigEntry(accountName string) error {
 
 	hostPattern := fmt.Sprintf("github.com-%s", accountName)
 	configStr := string(configData)
-	
+
 	// Check if the entry exists
-	if !containsHost(configStr, hostPattern) && 
-	   !strings.Contains(configStr, "# Multigit managed config for "+accountName) {
+	if !containsHost(configStr, hostPattern) &&
+		!strings.Contains(configStr, "# Multigit managed config for "+accountName) {
 		return nil // Entry doesn't exist, nothing to do
 	}
 
@@ -578,7 +577,7 @@ func RemoveSSHConfigEntry(accountName string) error {
 
 	// First try to remove by host pattern (for backward compatibility)
 	updatedConfig := removeHostEntry(configStr, hostPattern)
-	
+
 	// If the config still contains the account name, try to remove by account name
 	if strings.Contains(updatedConfig, accountName) {
 		updatedConfig = removeHostEntry(updatedConfig, accountName)
@@ -614,8 +613,8 @@ func RemoveSSHConfigEntry(accountName string) error {
 // Helper function to check if a host entry already exists
 func containsHost(configData, host string) bool {
 	hostPattern := fmt.Sprintf("\nHost %s", host)
-	return strings.Contains(configData, hostPattern) || 
-	       strings.HasPrefix(configData, fmt.Sprintf("Host %s", host))
+	return strings.Contains(configData, hostPattern) ||
+		strings.HasPrefix(configData, fmt.Sprintf("Host %s", host))
 }
 
 // Helper function to remove a host entry from SSH config
@@ -628,7 +627,7 @@ func removeHostEntry(configData, hostPattern string) string {
 
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
-		
+
 		// Check for Multigit config block start
 		if strings.HasPrefix(line, "# Multigit managed config for ") && (hostPattern == "" || strings.Contains(line, hostPattern)) {
 			inMultigitBlock = true

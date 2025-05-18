@@ -25,6 +25,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Clear Go modules cache
+      run: |
+        rm -rf ~/go/pkg/mod ~/go/bin
+
     - name: Cache Go modules
       uses: actions/cache@v3
       with:
@@ -35,6 +39,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
 
+    - name: Format code
+      run: |
+        # Format all Go files
+        gofmt -w .
+        # Check if there are any uncommitted changes
+        git diff --exit-code || (echo "Files were not properly formatted. Run 'gofmt -w .' locally and commit the changes." && exit 1)
 
     - name: Run unit tests with coverage
       run: |
