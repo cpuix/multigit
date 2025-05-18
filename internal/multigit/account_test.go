@@ -110,7 +110,7 @@ var testConfig *Config
 // saveTestConfig is a helper function to save the config in tests
 func saveTestConfig(c Config) error {
 	log.Printf("saveTestConfig called with config: %+v", c)
-	
+
 	// Create a deep copy to avoid modifying the original
 	configCopy := Config{
 		Accounts:      make(map[string]Account),
@@ -258,7 +258,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "test@example.com",
 			expectError: true,
 			errContains: "account name cannot be empty",
-			skipSSH:    true,
+			skipSSH:     true,
 		},
 		{
 			name:        "Fail on invalid email",
@@ -266,7 +266,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "invalid-email",
 			expectError: true,
 			errContains: "invalid email format",
-			skipSSH:    true,
+			skipSSH:     true,
 		},
 		{
 			name:        "Fail on SaveConfig error",
@@ -285,7 +285,7 @@ func TestCreateAccount(t *testing.T) {
 			},
 			expectError: true,
 			errContains: "failed to save config",
-			skipSSH: false,
+			skipSSH:     false,
 		},
 	}
 
@@ -317,7 +317,7 @@ func TestCreateAccount(t *testing.T) {
 			withMockedConfig(t, func() {
 				// Log the address of the current SaveConfig function
 				t.Logf("Original SaveConfig function address: %p", multigit.SaveConfig)
-				
+
 				// Override SaveConfig for test
 				oldSaveConfig := multigit.SaveConfig
 				multigit.SaveConfig = func(c Config) error {
@@ -385,7 +385,7 @@ func TestCreateAccount(t *testing.T) {
 
 func TestAccountManagement(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Override the config directory for testing
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tempDir)

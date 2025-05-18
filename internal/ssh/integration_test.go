@@ -84,12 +84,12 @@ func TestSSHKeyLifecycle(t *testing.T) {
 		// Config dosyasının güncellendiğini doğrula
 		configData, err := os.ReadFile(configPath)
 		require.NoError(t, err, "SSH config dosyası okunamadı")
-		
+
 		// SSH config dosyasında beklenen girişlerin olduğunu kontrol et
 		expectedHost := fmt.Sprintf("github.com-%s", accountName)
 		configContent := string(configData)
-		
-		assert.Contains(t, configContent, "Host "+expectedHost, 
+
+		assert.Contains(t, configContent, "Host "+expectedHost,
 			"SSH config dosyasında beklenen Host bulunamadı")
 		assert.Contains(t, configContent, "IdentityFile "+keyFile,
 			"SSH config dosyasında IdentityFile bulunamadı")
@@ -110,7 +110,7 @@ func TestSSHKeyLifecycle(t *testing.T) {
 			cmd := exec.Command("ssh-add", "-l")
 			output, err := cmd.CombinedOutput()
 			if err == nil { // Eğer hata yoksa (yani liste boş değilse)
-				assert.NotContains(t, string(output), filepath.Base(keyFile), 
+				assert.NotContains(t, string(output), filepath.Base(keyFile),
 					"SSH agent'tan anahtar kaldırılmadı")
 			}
 		}
