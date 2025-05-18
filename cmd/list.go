@@ -45,7 +45,7 @@ var listCmd = &cobra.Command{
 			// Print account details
 			fmt.Printf("%s %s\n", status, color.CyanString(name))
 			fmt.Printf("  Email: %s\n", account.Email)
-			
+
 			// Show SSH key info if available
 			homeDir, _ := os.UserHomeDir()
 			keyPath := fmt.Sprintf("%s/.ssh/id_rsa_%s", homeDir, name)
@@ -63,11 +63,10 @@ var listCmd = &cobra.Command{
 			fmt.Println()
 		}
 
-
 		// Print usage instructions
 		if activeAccountName != "" {
-			fmt.Printf("Active account: %s <%s>\n", 
-				color.CyanString(activeAccountName), 
+			fmt.Printf("Active account: %s <%s>\n",
+				color.CyanString(activeAccountName),
 				color.CyanString(activeAccount.Email))
 		} else {
 			fmt.Println("No active account. Use 'multigit use <account>' to set an active account.")

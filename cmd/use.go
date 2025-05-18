@@ -33,10 +33,10 @@ This will:
 1. Add the specified account's SSH key to the SSH agent
 2. Set the git user name and email (global or local)
 3. Update the active account in the configuration`,
-	Args:  cobra.ExactArgs(1),
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accountName := args[0]
-		
+
 		// Check if account exists in config
 		config := multigit.LoadConfig()
 		account, exists := config.Accounts[accountName]

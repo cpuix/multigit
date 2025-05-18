@@ -146,7 +146,6 @@ var deleteProfileCmd = &cobra.Command{
 		// Delete the profile
 		delete(config.Profiles, profileName)
 
-
 		// Save the updated config
 		if err := multigit.SaveConfig(config); err != nil {
 			return fmt.Errorf("failed to delete profile: %v", err)

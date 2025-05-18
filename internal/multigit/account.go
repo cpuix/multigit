@@ -3,10 +3,10 @@ package multigit
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/cpuix/multigit/internal/ssh"
 )

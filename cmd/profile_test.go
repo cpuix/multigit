@@ -126,5 +126,3 @@ func TestProfileCommand(t *testing.T) {
 		})
 	}
 }
-
-

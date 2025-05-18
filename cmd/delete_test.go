@@ -23,23 +23,23 @@ func setupTestAccount(t *testing.T, config *multigit.Config) {
 
 func setupTestConfig(t *testing.T) (string, func()) {
 	t.Helper()
-	
+
 	// Create temp dir for test config
 	tempDir := t.TempDir()
 	cfgFile := filepath.Join(tempDir, "config.json")
-	
+
 	// Set config file path
 	oldCfg := cmd.CfgFile
 	cmd.CfgFile = cfgFile
-	
+
 	// Initialize config
 	cmd.InitConfig()
-	
+
 	// Setup test account
 	config := multigit.LoadConfig()
 	setupTestAccount(t, &config)
 	require.NoError(t, multigit.SaveConfig(config), "Failed to save test config")
-	
+
 	// Return cleanup function
 	return cfgFile, func() {
 		cmd.CfgFile = oldCfg

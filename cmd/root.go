@@ -20,9 +20,9 @@ var (
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-    Use:   "multigit",
-    Short: "MultiGit is a CLI for managing multiple GitHub accounts",
-    Long:  `MultiGit helps you to manage multiple GitHub accounts effortlessly.`,
+	Use:   "multigit",
+	Short: "MultiGit is a CLI for managing multiple GitHub accounts",
+	Long:  `MultiGit helps you to manage multiple GitHub accounts effortlessly.`,
 }
 
 // Execute executes the root command
@@ -34,7 +34,7 @@ func Execute() {
 }
 
 func init() {
-    cobra.OnInitialize(InitConfig)
+	cobra.OnInitialize(InitConfig)
 	RootCmd.PersistentFlags().StringVar(&CfgFile, "config", "", "config file (default is $HOME/.multigit.json)")
 }
 
@@ -50,7 +50,7 @@ func InitConfig() {
 	if CfgFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(CfgFile)
-		
+
 		// Create directory if it doesn't exist
 		dir := filepath.Dir(CfgFile)
 		if err := os.MkdirAll(dir, 0755); err != nil {

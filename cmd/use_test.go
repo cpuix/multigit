@@ -61,7 +61,7 @@ func TestUseCommand(t *testing.T) {
 	// Setup test environment
 	tempDir := t.TempDir()
 	testConfigPath := filepath.Join(tempDir, "config.json")
-	
+
 	// Set up test config
 	os.Setenv("MULTIGIT_CONFIG", testConfigPath)
 	t.Cleanup(func() { os.Unsetenv("MULTIGIT_CONFIG") })
@@ -105,8 +105,6 @@ func TestUseCommand(t *testing.T) {
 	}
 	t.Cleanup(func() { cmd.SSHAddToAgentFunc = oldSSHAddToAgent })
 
-
-
 	// Test cases
 	tests := []struct {
 		name        string
@@ -144,7 +142,7 @@ func TestUseCommand(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			// Run test setup if provided
 			if tt.setup != nil {
 				tt.setup()
@@ -158,7 +156,6 @@ func TestUseCommand(t *testing.T) {
 			tempDir := t.TempDir()
 			os.Chdir(tempDir)
 
-
 			// Reset viper for each test case
 			viper.Reset()
 			viper.SetConfigFile(testConfigPath)
@@ -166,13 +163,13 @@ func TestUseCommand(t *testing.T) {
 
 			// Reset command tracking
 			tuc.gitCommands = nil
-			
+
 			// Execute the command with the test arguments
 			cmd.RootCmd.SetArgs(tt.args)
 			err := cmd.RootCmd.Execute()
-			
+
 			t.Logf("Git commands executed: %v", tuc.gitCommands)
-			
+
 			// Verify the correct git commands were called
 			if !tt.expectError {
 				// Verify that git config was called with the correct arguments
@@ -192,4 +189,3 @@ func TestUseCommand(t *testing.T) {
 		})
 	}
 }
-

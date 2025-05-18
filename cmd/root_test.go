@@ -42,7 +42,7 @@ func TestInitConfig(t *testing.T) {
 		// Set up the test environment
 		oldCfg := cmd.CfgFile
 		oldConfig := cmd.Config
-		
+
 		// Clean up
 		defer func() {
 			cmd.CfgFile = oldCfg
@@ -82,7 +82,7 @@ func TestInitConfig(t *testing.T) {
 		configData, err := os.ReadFile(cfgFile)
 		assert.NoError(t, err, "Should be able to read config file")
 		assert.True(t, len(configData) > 0, "Config file should not be empty")
-		
+
 		// Parse the JSON to ensure it's valid
 		var config map[string]interface{}
 		err = json.Unmarshal(configData, &config)
