@@ -76,18 +76,19 @@ Current overall test coverage: **83.0%**
    - [x] Add basic tests for command initialization
    - [x] Test error cases for the `use` command
    - [x] Test the `InitConfig` function
-   - [ ] Add more comprehensive tests for all commands
-   - [ ] Test command-line flags and arguments
+   - [x] Add more comprehensive tests for all commands
+   - [x] Test command-line flags and arguments
+   - [x] Add integration tests for command interactions
 
 ### Phase 3: Utility Packages (Priority: Low)
 
 1. **Logger Package**
-   - [ ] Add tests for all logger functions
-   - [ ] Test log level configurations
+   - [x] Add tests for all logger functions
+   - [x] Test log level configurations
 
 2. **Errors Package**
-   - [ ] Test error wrapping and context
-   - [ ] Test error type checking
+   - [x] Test error wrapping and context
+   - [x] Test error type checking
 
 3. **Profiling Package**
    - [ ] Add tests for profiling functions

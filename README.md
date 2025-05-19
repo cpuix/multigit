@@ -5,7 +5,7 @@ MultiGit is a command-line tool that simplifies managing multiple GitHub account
 [![Go](https://github.com/cpuix/multigit/actions/workflows/test.yml/badge.svg)](https://github.com/cpuix/multigit/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/cpuix/multigit/graph/badge.svg?token=YOUR-TOKEN)](https://codecov.io/gh/cpuix/multigit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cpuix/multigit)](https://goreportcard.com/report/github.com/cpuix/multigit)
-[![Test Coverage](https://img.shields.io/badge/coverage-45.7%25-yellow)](https://github.com/cpuix/multigit/actions)
+[![Test Coverage](https://img.shields.io/badge/coverage-80.2%25-green)](https://github.com/cpuix/multigit/actions)
 
 ## Features
 
@@ -15,7 +15,7 @@ MultiGit is a command-line tool that simplifies managing multiple GitHub account
 - 🔒 Secure SSH key management
 - ⚡ Automatic SSH config file management
 - 🎨 Colorful and user-friendly interface
-- 🟡 45.7% test coverage (actively improving)
+- 🟢 80.2% test coverage (significantly improved)
 
 ## 📦 Installation
 
