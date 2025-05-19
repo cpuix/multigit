@@ -1,129 +1,146 @@
 # MultiGit
 
-MultiGit, birden fazla GitHub hesabı arasında kolayca geçiş yapmanızı sağlayan bir komut satırı aracıdır. SSH anahtarlarınızı yönetir ve git konfigürasyonlarını otomatik olarak ayarlar.
+MultiGit is a command-line tool that simplifies managing multiple GitHub accounts. It handles SSH key management and automatically configures git settings for seamless context switching between accounts.
 
 [![Go](https://github.com/cpuix/multigit/actions/workflows/test.yml/badge.svg)](https://github.com/cpuix/multigit/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/cpuix/multigit/graph/badge.svg?token=YOUR-TOKEN)](https://codecov.io/gh/cpuix/multigit)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cpuix/multigit)](https://goreportcard.com/report/github.com/cpuix/multigit)
 [![Test Coverage](https://img.shields.io/badge/coverage-53.5%25-green)](https://github.com/cpuix/multigit/actions)
 
-## Özellikler
+## Features
 
-- 🚀 Birden fazla GitHub hesabı için SSH anahtarı oluşturma ve yönetme
-- 🔄 Hesaplar arasında hızlı geçiş
-- 📊 Profil yönetimi ile hesapları gruplama
-- 🔒 SSH anahtarlarını güvenli bir şekilde yönetme
-- ⚡ SSH config dosyasını otomatik olarak yönetme
-- 🎨 Renkli ve kullanıcı dostu arayüz
-- ✅ %58.8+ test kapsamı (artırılmaya devam ediyor)
+- 🚀 Create and manage SSH keys for multiple GitHub accounts
+- 🔄 Quick switching between different accounts
+- 📊 Profile management for account grouping
+- 🔒 Secure SSH key management
+- ⚡ Automatic SSH config file management
+- 🎨 Colorful and user-friendly interface
+- ✅ 53.5%+ test coverage (continuously improving)
 
-## Kurulum
+## 📦 Installation
 
-### Go ile Kurulum (Geliştiriciler için)
+### macOS (Homebrew)
 
-1. Go'yu yükleyin (1.21 veya üzeri)
-2. MultiGit'i kurun:
+```bash
+# Add custom tap (first time only)
+brew tap cpuix/multigit
+
+# Install MultiGit
+brew install multigit
+```
+
+### Linux (DEB/RPM)
+
+```bash
+# DEB (Ubuntu/Debian)
+wget https://github.com/cpuix/multigit/releases/latest/download/multigit_linux_amd64.deb
+sudo dpkg -i multigit_linux_amd64.deb
+
+# RPM (Fedora/CentOS/RHEL)
+wget https://github.com/cpuix/multigit/releases/latest/download/multigit_linux_amd64.rpm
+sudo rpm -i multigit_linux_amd64.rpm
+```
+
+### Windows
+
+1. [Download the latest release](https://github.com/cpuix/multigit/releases/latest)
+2. Run the downloaded `.msi` file
+3. Follow the installation wizard
+
+### Using with Docker
+
+```bash
+# Run MultiGit
+docker run --rm -it -v ~/.ssh:/root/.ssh -v $(pwd):/workspace ghcr.io/cpuix/multigit:latest
+
+# Or add an alias
+echo 'alias multigit="docker run --rm -it -v ~/.ssh:/root/.ssh -v $(pwd):/workspace ghcr.io/cpuix/multigit:latest"' >> ~/.bashrc
+```
+
+### Go Installation (For Developers)
+
+1. Install Go (1.21 or later)
+2. Install MultiGit:
 
 ```bash
 go install github.com/cpuix/multigit@latest
 ```
 
-### Binary İndir (Kullanıcılar için)
+### Manual Installation (Binary)
 
-[En son sürümü indirin](https://github.com/cpuix/multigit/releases/latest) ve PATH'inize ekleyin.
-
-## Hızlı Başlangıç
-
-### Yeni bir hesap ekleme
+1. [Download the latest release](https://github.com/cpuix/multigit/releases/latest)
+2. Add the binary to your PATH
+3. Make it executable:
 
 ```bash
-multigit create <hesap_adi> <email@example.com>
+chmod +x multigit
+sudo mv multigit /usr/local/bin/
 ```
 
-Örnek:
+## Quick Start
+
+### Adding a New Account
+
 ```bash
-multigit create is-hesabi isim.soyisim@firma.com
-multigit create kisisel ben@mailim.com -p "güçlü-şifre"
+multigit create <account_name> <email@example.com>
 ```
 
-### Hesaplar arasında geçiş yapma
-
+Example:
 ```bash
-multigit use <hesap_adi>
+multigit create work-account name.surname@company.com
+multigit create personal me@mydomain.com -p "strong-password"
 ```
 
-### Profil Yönetimi
+### Switching Between Accounts
 
 ```bash
-# Yeni profil oluştur
-multigit profile create <profil_adi>
+multigit use <account_name>
+```
 
-# Profilleri listele
+### Profile Management
+
+```bash
+# Create a new profile
+multigit profile create <profile_name>
+
+# List all profiles
 multigit profile list
 
-# Profil kullan
-multigit profile use <profil_adi>
+# Use a specific profile
+multigit profile use <profile_name>
 
-# Profil sil
-multigit profile delete <profil_adi>
+# Delete a profile
+multigit profile delete <profile_name>
 ```
 
-### Diğer Komutlar
+### Other Commands
 
 ```bash
-# Hesapları listele
+# List all accounts
 multigit list
 
-# Aktif hesabı göster
+# Show active account
 multigit status
 
-# Hesap sil
-multigit delete <hesap_adi>
+# Delete an account
+multigit delete <account_name>
 ```
 
-## Geliştirme
+## Development
 
-### Testleri Çalıştırma
+### Running Tests
 
 ```bash
-# Tüm testleri çalıştır
+# Run all tests
 make test
 
-# Test kapsamını görüntüle
+# View test coverage
 make cover
 
-# Lint kontrolü
+# Run linter
 make lint
 ```
 
-### Yapılandırma
+## License
 
-MultiGit yapılandırması `~/.config/multigit/config.json` dosyasında saklanır. Bu dosyayı manuel olarak düzenleyebilir veya komut satırı arayüzünü kullanabilirsiniz.
-
-## Katkıda Bulunma
-
-Katkılarınızı bekliyoruz! Lütfen önce bir konu açarak neyi değiştirmek istediğinizi tartışın.
-
-1. Fork'layın
-2. Yeni bir branch oluşturun (`git checkout -b yeni-ozellik`)
-3. Değişikliklerinizi commit'leyin (`git commit -am 'Yeni özellik eklendi'`)
-4. Branch'e push'layın (`git push origin yeni-ozellik`)
-5. Pull Request açın
-
-### Test Kapsamı
-
-Tüm yeni özellikler için birim testleri eklenmelidir. Mevcut test kapsamı %58.8'tir ve artırılmaya devam edilmektedir. Test kapsamını artırmak için çalışmalar sürmektedir.
-
-Testleri çalıştırmak için:
-
-```bash
-# Tüm testleri çalıştır
-make test
-
-# Test kapsamını görüntüle
-make cover
-```
-
-## Lisans
-
-Bu proje [MIT lisansı](LICENSE) altında lisanslanmıştır.
+This project is licensed under the [MIT License](LICENSE).
