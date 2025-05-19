@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Mock os.Exit for testing
+var osExit = os.Exit
+
 func TestRootCommand(t *testing.T) {
 	t.Run("Execute", func(t *testing.T) {
 		// Execute root command
@@ -21,6 +24,9 @@ func TestRootCommand(t *testing.T) {
 		// Check results
 		assert.NoError(t, err, "Execute should not return error")
 	})
+
+	// We'll skip testing the Execute function directly since it's just a thin wrapper around RootCmd.Execute
+	// and modifying RootCmd causes side effects in other tests
 }
 
 func TestInitConfig(t *testing.T) {
@@ -116,6 +122,71 @@ func TestInitConfig(t *testing.T) {
 		assert.NotNil(t, cmd.Config, "Config should be initialized")
 		assert.NotNil(t, cmd.Config.Accounts, "Accounts map should be initialized")
 		assert.NotNil(t, cmd.Config.Profiles, "Profiles map should be initialized")
+	})
+
+	t.Run("WithNoConfigFile", func(t *testing.T) {
+		// Save original environment
+		oldHome := os.Getenv("HOME")
+		oldCfg := cmd.CfgFile
+		oldConfig := cmd.Config
+
+		// Create a temporary home directory
+		tempHome := t.TempDir()
+		os.Setenv("HOME", tempHome)
+
+		// Clean up
+		defer func() {
+			os.Setenv("HOME", oldHome)
+			cmd.CfgFile = oldCfg
+			cmd.Config = oldConfig
+		}()
+
+		// Reset config file
+		cmd.CfgFile = ""
+
+		// Call InitConfig
+		assert.NotPanics(t, cmd.InitConfig, "InitConfig should not panic when no config file exists")
+
+		// Verify a default config was created
+		assert.NotNil(t, cmd.Config, "Config should be initialized")
+		assert.NotNil(t, cmd.Config.Accounts, "Accounts map should be initialized")
+		assert.NotNil(t, cmd.Config.Profiles, "Profiles map should be initialized")
+
+		// Verify the config file was created in the default location
+		defaultConfigPath := filepath.Join(tempHome, ".config", "multigit", "config.json")
+		_, err := os.Stat(defaultConfigPath)
+		assert.NoError(t, err, "Default config file should be created")
+	})
+
+	t.Run("WithConfigFileNotFoundError", func(t *testing.T) {
+		// Save original environment
+		oldCfg := cmd.CfgFile
+		oldConfig := cmd.Config
+
+		// Create a temporary directory for the config file
+		tempDir := t.TempDir()
+		cfgFile := filepath.Join(tempDir, "nonexistent_config.json")
+
+		// Clean up
+		defer func() {
+			cmd.CfgFile = oldCfg
+			cmd.Config = oldConfig
+		}()
+
+		// Set config file to a non-existent file
+		cmd.CfgFile = cfgFile
+
+		// Call InitConfig
+		assert.NotPanics(t, cmd.InitConfig, "InitConfig should not panic when config file doesn't exist")
+
+		// Verify a default config was created
+		assert.NotNil(t, cmd.Config, "Config should be initialized")
+		assert.NotNil(t, cmd.Config.Accounts, "Accounts map should be initialized")
+		assert.NotNil(t, cmd.Config.Profiles, "Profiles map should be initialized")
+
+		// Note: We're not verifying file creation here because the behavior depends on the environment
+		// and can be flaky in test environments. The important part is that the function doesn't panic
+		// and initializes the config properly.
 	})
 }
 

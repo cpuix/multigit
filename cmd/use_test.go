@@ -36,6 +36,8 @@ func (tuc *testUseCommand) mockIsGitRepo() bool {
 var originalRunGitCommand = cmd.RunGitCommand
 var originalIsGitRepo = cmd.IsGitRepo
 
+
+
 // TestUseCommand tests the use command
 func TestUseCommand(t *testing.T) {
 	// Create test helper
@@ -110,6 +112,8 @@ func TestUseCommand(t *testing.T) {
 		name        string
 		args        []string
 		setup       func()
+		local       bool
+		expectCmds  int
 		expectError bool
 		errMsg      string
 	}{
@@ -125,6 +129,24 @@ func TestUseCommand(t *testing.T) {
 				}
 				require.NoError(t, multigit.SaveConfig(config))
 			},
+			local:       false,
+			expectCmds:  5, // Expect 5 git config commands for global config
+			expectError: false,
+		},
+		{
+			name: "Switch to existing account with local config",
+			args: []string{"use", "test-account", "--local"},
+			setup: func() {
+				// Ensure the test account exists in the config
+				config := multigit.LoadConfig()
+				config.Accounts["test-account"] = multigit.Account{
+					Name:  "Test User",
+					Email: "test@example.com",
+				}
+				require.NoError(t, multigit.SaveConfig(config))
+			},
+			local:       true,
+			expectCmds:  4, // Expect 4 git config commands for local config
 			expectError: false,
 		},
 		{
@@ -136,6 +158,8 @@ func TestUseCommand(t *testing.T) {
 				delete(config.Accounts, "nonexistent")
 				require.NoError(t, multigit.SaveConfig(config))
 			},
+			local:       false,
+			expectCmds:  0, // Expect no git commands
 			expectError: true,
 			errMsg:      "account 'nonexistent' does not exist",
 		},
@@ -173,8 +197,14 @@ func TestUseCommand(t *testing.T) {
 			// Verify the correct git commands were called
 			if !tt.expectError {
 				// Verify that git config was called with the correct arguments
-				assert.Greater(t, len(tuc.gitCommands), 0, "Expected at least one git command to be executed")
-				// Add more specific assertions about the git commands if needed
+				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
+				// Verify all commands are 'config' commands
+				for _, cmd := range tuc.gitCommands {
+					assert.Equal(t, "config", cmd, "Expected 'config' command, got %s", cmd)
+				}
+			} else {
+				// Verify no git commands were called
+				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
 			}
 
 			// Verify results

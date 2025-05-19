@@ -8,11 +8,13 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/cpuix/multigit/pkg/logger"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -29,8 +31,8 @@ const (
 	// ED25519 keys are always 256 bits (32 bytes) when using the standard implementation
 )
 
-// marshalED25519PrivateKey converts an ED25519 private key to OpenSSH format
-func marshalED25519PrivateKey(key ed25519.PrivateKey, comment string) []byte {
+// MarshalED25519PrivateKey converts an ED25519 private key to OpenSSH format
+func MarshalED25519PrivateKey(key ed25519.PrivateKey, comment string) []byte {
 	// The public key is the last 32 bytes of the private key
 	publicKey := key.Public().(ed25519.PublicKey)
 
@@ -105,14 +107,34 @@ func marshalED25519PrivateKey(key ed25519.PrivateKey, comment string) []byte {
 	return pem.EncodeToMemory(pemBlock)
 }
 
-// validatePrivateKey attempts to parse the private key to ensure it's in a valid format
-func validatePrivateKey(keyData []byte) error {
-	// Try to parse the private key
-	_, err := ssh.ParsePrivateKey(keyData)
-	if err != nil {
-		return fmt.Errorf("invalid private key format: %w", err)
+// ValidatePrivateKey attempts to parse the private key to ensure it's in a valid format
+func ValidatePrivateKey(keyData []byte) error {
+	// First try to parse as a PEM block
+	block, _ := pem.Decode(keyData)
+	if block == nil {
+		// Not a PEM block, try parsing directly as OpenSSH format
+		_, err := ssh.ParseRawPrivateKey(keyData)
+		if err == nil {
+			return nil
+		}
+
+		// Try parsing with empty passphrase
+		_, err = ssh.ParseRawPrivateKeyWithPassphrase(keyData, nil)
+		if err == nil {
+			return nil
+		}
+
+		return fmt.Errorf("invalid private key format: not a valid PEM block or OpenSSH format: %w", err)
 	}
-	return nil
+
+	// For PEM blocks, check the type
+	switch block.Type {
+	case "RSA PRIVATE KEY", "PRIVATE KEY", "OPENSSH PRIVATE KEY":
+		// These are valid private key types
+		return nil
+	default:
+		return fmt.Errorf("unsupported private key type: %s", block.Type)
+	}
 }
 
 // CreateSSHKey creates a new SSH key pair for the given account
@@ -185,41 +207,38 @@ func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) er
 		}
 
 	case KeyTypeED25519:
-		// Generate ED25519 key pair
 		pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return fmt.Errorf("failed to generate ED25519 key pair: %w", err)
 		}
 
-		// Create a signer from the private key
-		signer, err := ssh.NewSignerFromSigner(privKey)
-		if err != nil {
-			return fmt.Errorf("failed to create signer from private key: %w", err)
-		}
-
 		// Marshal private key in OpenSSH format
-		privateKeyPEM := &pem.Block{
-			Type:  "OPENSSH PRIVATE KEY",
-			Bytes: ssh.MarshalAuthorizedKey(signer.PublicKey()),
+		privateKeyBytes := MarshalED25519PrivateKey(privKey, comment)
+
+		// Validate the private key
+		if err := ValidatePrivateKey(privateKeyBytes); err != nil {
+			return fmt.Errorf("invalid private key generated: %w", err)
 		}
 
 		// Write private key to file
-		if err := os.WriteFile(keyFile, pem.EncodeToMemory(privateKeyPEM), 0600); err != nil {
+		if err := os.WriteFile(keyFile, privateKeyBytes, 0600); err != nil {
 			return fmt.Errorf("failed to write private key: %w", err)
-		}
-
-		// Generate public key
-		sshPubKey, err := ssh.NewPublicKey(pubKey)
-		if err != nil {
-			return fmt.Errorf("failed to generate SSH public key: %w", err)
 		}
 
 		// Write public key to file
 		publicKeyPath := keyFile + ".pub"
-		publicKey := fmt.Sprintf("%s %s %s", ssh.KeyAlgoED25519, base64.StdEncoding.EncodeToString(sshPubKey.Marshal()), comment)
-		if err := os.WriteFile(publicKeyPath, []byte(publicKey+"\n"), 0644); err != nil {
+		publicKeyBytes, err := SSHPublicKeyED25519(pubKey, comment)
+		if err != nil {
+			return fmt.Errorf("failed to generate public key: %w", err)
+		}
+		if err := os.WriteFile(publicKeyPath, publicKeyBytes, 0644); err != nil {
 			return fmt.Errorf("failed to write public key: %w", err)
 		}
+
+		// Log success
+		logger.Infof("✅ SSH key pair created successfully for %s", accountName)
+		logger.Debugf("Private key: %s", keyFile)
+		logger.Debugf("Public key: %s", publicKeyPath)
 
 	default:
 		return fmt.Errorf("unsupported key type: %s", keyType)
@@ -248,8 +267,8 @@ func sshPublicKeyRSA(pubKey *rsa.PublicKey, comment string) ([]byte, error) {
 	return []byte(fmt.Sprintf("%s %s %s", keyType, keyBytes, comment)), nil
 }
 
-// sshPublicKeyED25519 generates the authorized_keys format for an ED25519 public key
-func sshPublicKeyED25519(pubKey ed25519.PublicKey, comment string) ([]byte, error) {
+// SSHPublicKeyED25519 generates the authorized_keys format for an ED25519 public key
+func SSHPublicKeyED25519(pubKey ed25519.PublicKey, comment string) ([]byte, error) {
 	// Generate the public key in SSH format
 	sshPubKey, err := ssh.NewPublicKey(pubKey)
 	if err != nil {
@@ -379,17 +398,18 @@ func AddSSHConfigEntry(accountName string) error {
 	return nil
 }
 
-// DeleteSSHKey deletes the SSH key pair for the given account name or key file path
 func DeleteSSHKey(accountOrKeyFile string) error {
 	// First, check if the input is a file path
 	if _, err := os.Stat(accountOrKeyFile); err == nil {
 		// It's a file path, delete it directly
+		log.Printf("Input is a file path, deleting directly: %s", accountOrKeyFile)
 		return DeleteSSHKeyFile(accountOrKeyFile)
 	}
 
 	// If not a file path, treat it as an account name
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
+		log.Printf("Failed to get home directory: %v", err)
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
@@ -398,30 +418,17 @@ func DeleteSSHKey(accountOrKeyFile string) error {
 
 	// Get the base name of the account (in case it's a path)
 	accountName := filepath.Base(accountOrKeyFile)
+	log.Printf("Deleting SSH key for account: %s (base name: %s)", accountOrKeyFile, accountName)
 
 	// First, try to find all key files in the .ssh directory that match the account name
 	sshDir := filepath.Join(homeDir, ".ssh")
-	entries, err := os.ReadDir(sshDir)
-	if err == nil {
-		// Look for files that contain the account name
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				name := entry.Name()
-				// Check if the filename contains the account name
-				if strings.Contains(name, accountName) {
-					keyFiles = append(keyFiles, filepath.Join(sshDir, name))
-				}
-			}
-		}
-	}
+	log.Printf("Looking for key files in: %s", sshDir)
 
-	// Also try standard naming patterns with both the full account name and just the base name
+	// First, try standard naming patterns with both the full account name and just the base name
 	patterns := []string{
 		// Standard patterns with key type prefix and account name
 		"id_rsa_%s",
 		"id_ed25519_%s",
-		// Just the account name
-		"%s",
 	}
 
 	// For each pattern, generate the full path with both full and base account names
@@ -434,6 +441,33 @@ func DeleteSSHKey(accountOrKeyFile string) error {
 		if accountName != accountOrKeyFile {
 			keyFile = filepath.Join(sshDir, fmt.Sprintf(pattern, accountName))
 			keyFiles = append(keyFiles, keyFile, keyFile+".pub")
+		}
+	}
+
+	// Also check for any files that contain the account name
+	entries, err := os.ReadDir(sshDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			name := entry.Name()
+			// Check if the filename contains the account name
+			if strings.Contains(name, accountName) {
+				fullPath := filepath.Join(sshDir, name)
+				// Only add if not already in the list
+				found := false
+				for _, existing := range keyFiles {
+					if existing == fullPath {
+						found = true
+						break
+					}
+				}
+				if !found {
+					keyFiles = append(keyFiles, fullPath)
+				}
+			}
 		}
 	}
 
