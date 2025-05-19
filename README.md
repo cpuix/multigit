@@ -17,7 +17,45 @@ MultiGit, birden fazla GitHub hesabı arasında kolayca geçiş yapmanızı sağ
 - 🎨 Renkli ve kullanıcı dostu arayüz
 - ✅ %58.8+ test kapsamı (artırılmaya devam ediyor)
 
-## Kurulum
+## 📦 Kurulum
+
+### macOS (Homebrew)
+
+```bash
+# Özel tap'ı ekleyin (sadece ilk kurulumda)
+brew tap cpuix/multigit
+
+# MultiGit'i kurun
+brew install multigit
+```
+
+### Linux (DEB/RPM)
+
+```bash
+# DEB (Ubuntu/Debian)
+wget https://github.com/cpuix/multigit/releases/latest/download/multigit_linux_amd64.deb
+sudo dpkg -i multigit_linux_amd64.deb
+
+# RPM (Fedora/CentOS/RHEL)
+wget https://github.com/cpuix/multigit/releases/latest/download/multigit_linux_amd64.rpm
+sudo rpm -i multigit_linux_amd64.rpm
+```
+
+### Windows
+
+1. [En son sürümü indirin](https://github.com/cpuix/multigit/releases/latest)
+2. İndirilen `.msi` dosyasını çalıştırın
+3. Kurulum sihirbazını takip edin
+
+### Docker ile Kullanım
+
+```bash
+# MultiGit'i çalıştır
+docker run --rm -it -v ~/.ssh:/root/.ssh -v $(pwd):/workspace ghcr.io/cpuix/multigit:latest
+
+# Veya bir alias ekleyin
+echo 'alias multigit="docker run --rm -it -v ~/.ssh:/root/.ssh -v $(pwd):/workspace ghcr.io/cpuix/multigit:latest"' >> ~/.bashrc
+```
 
 ### Go ile Kurulum (Geliştiriciler için)
 
@@ -28,9 +66,16 @@ MultiGit, birden fazla GitHub hesabı arasında kolayca geçiş yapmanızı sağ
 go install github.com/cpuix/multigit@latest
 ```
 
-### Binary İndir (Kullanıcılar için)
+### Manuel Kurulum (Binary)
 
-[En son sürümü indirin](https://github.com/cpuix/multigit/releases/latest) ve PATH'inize ekleyin.
+1. [En son sürümü indirin](https://github.com/cpuix/multigit/releases/latest)
+2. İndirilen binary'i PATH'inize ekleyin
+3. Çalıştırılabilir yapın:
+
+```bash
+chmod +x multigit
+sudo mv multigit /usr/local/bin/
+```
 
 ## Hızlı Başlangıç
 

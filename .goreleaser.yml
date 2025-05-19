@@ -1,50 +1,79 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
+# .goreleaser.yml
+# Configuration for GoReleaser - https://goreleaser.com
+
+# Global settings
+project_name: multigit
+env:
+  - CGO_ENABLED=0
+  - GO111MODULE=on
 
 before:
   hooks:
     - go mod download
+    - go generate ./...
 
 builds:
   - env:
-      - "CGO_ENABLED=0"
+      - CGO_ENABLED=0
     goos:
-      - "linux"
-      - "darwin"
-      - "windows"
+      - linux
+      - darwin
+      - windows
     goarch:
-      - "amd64"
-      - "arm64"
+      - amd64
+      - arm64
     ignore:
-      - goos: "darwin"
-        goarch: "386"
-      - goos: "windows"
-        goarch: "arm64"
-    ldflags:
-      - "-s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}"
-    binary: "multigit"
+      - goos: darwin
+        goarch: 386
+      - goos: windows
+        goarch: arm64
+    ldflags: "-s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}"
+    binary: multigit
+    main: .
 
 archives:
-  - format: "binary"
+  - format: binary
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .ExeSuffix }}{{ .ExeSuffix }}{{ end }}"
+    format_overrides:
+      - goos: windows
+        format: zip
 
 checksum:
   name_template: "checksums.txt"
-  algorithm: "sha256"
+  algorithm: sha256
 
 changelog:
-  sort: "asc"
+  sort: asc
   filters:
     exclude:
       - "^docs:"
       - "^test:"
       - "^chore:"
       - "^refactor:"
+      - "^ci:"
 
 release:
   github:
-    owner: "cpuix"
-    name: "multigit"
+    owner: cpuix
+    name: multigit
   draft: false
-  prerelease: false
-  name_template: "{{ .ProjectName }}-{{ .Tag }}"
+  prerelease: auto
+  name_template: "{{ .ProjectName }} {{ .Tag }}"
+  extra_files:
+    - glob: LICENSE
+    - glob: README.md
+
+dockers:
+  - image_templates:
+      - "ghcr.io/cpuix/multigit:{{ .Version }}"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64,linux/arm64
+      - --label=org.opencontainers.image.title={{.ProjectName}}
+      - --label=org.opencontainers.image.description={{.ProjectName}}
+      - --label=org.opencontainers.image.url=https://github.com/cpuix/multigit
+      - --label=org.opencontainers.image.source=https://github.com/cpuix/multigit
+      - --label=org.opencontainers.image.version={{.Version}}
+      - --label=org.opencontainers.image.created={{.Date}}
+      - --label=org.opencontainers.image.licenses=MIT

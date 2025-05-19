@@ -48,3 +48,13 @@ dist/
 
 # Logs
 *.log
+
+# Profiling data and test artifacts
+profiles/
+*.pprof
+*.prof
+*.trace
+*.memprof
+*.cpuprof
+*.blockprof
+*.mutexprof
