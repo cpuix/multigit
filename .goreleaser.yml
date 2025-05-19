@@ -1,5 +1,6 @@
 # .goreleaser.yml
 # Configuration for GoReleaser - https://goreleaser.com
+version: 2
 
 # Global settings
 project_name: multigit
