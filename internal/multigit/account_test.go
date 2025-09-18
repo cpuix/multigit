@@ -40,6 +40,11 @@ func (m *MockSSH) AddSSHKeyToAgent(accountName string) error {
 	return args.Error(0)
 }
 
+func (m *MockSSH) RemoveSSHKeyFromAgent(accountName string) error {
+	args := m.Called(accountName)
+	return args.Error(0)
+}
+
 func (m *MockSSH) AddSSHConfigEntry(accountName string) error {
 	args := m.Called(accountName)
 	return args.Error(0)
@@ -588,10 +593,6 @@ func TestGetConfigPath(t *testing.T) {
 	assert.Equal(t, expectedPath, path, "getConfigPath should return the expected path")
 }
 
-
-
-
-
 // TestGetActiveAccount tests the GetActiveAccount function
 func TestGetActiveAccount(t *testing.T) {
 	// Save the original HOME environment variable
@@ -711,8 +712,9 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations
+				mockSSH.On("RemoveSSHKeyFromAgent", "test-account").Return(nil)
 				mockSSH.On("DeleteSSHKey", "test-account").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "test-account").Return(nil)
 			},
@@ -762,8 +764,9 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations with an error for DeleteSSHKey
+				mockSSH.On("RemoveSSHKeyFromAgent", "test-account-ssh-error").Return(nil)
 				mockSSH.On("DeleteSSHKey", "test-account-ssh-error").Return(fmt.Errorf("SSH key deletion error"))
 				mockSSH.On("RemoveSSHConfigEntry", "test-account-ssh-error").Return(nil)
 			},
@@ -791,8 +794,9 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations with an error for RemoveSSHConfigEntry
+				mockSSH.On("RemoveSSHKeyFromAgent", "test-account-config-error").Return(nil)
 				mockSSH.On("DeleteSSHKey", "test-account-config-error").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "test-account-config-error").Return(fmt.Errorf("SSH config removal error"))
 			},
@@ -820,8 +824,9 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations
+				mockSSH.On("RemoveSSHKeyFromAgent", "active-account").Return(nil)
 				mockSSH.On("DeleteSSHKey", "active-account").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "active-account").Return(nil)
 			},
@@ -834,7 +839,7 @@ func TestDeleteAccount(t *testing.T) {
 			// Create a new temp directory for each test case
 			testDir := t.TempDir()
 			os.Setenv("HOME", testDir)
-			
+
 			// Set up the test environment
 			if tt.setup != nil {
 				tt.setup()

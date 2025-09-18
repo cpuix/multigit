@@ -103,6 +103,11 @@ func DeleteAccount(accountName string) error {
 		return fmt.Errorf("account '%s' does not exist", accountName)
 	}
 
+	// Remove SSH key from agent before deleting files
+	if err := SSHClient.RemoveSSHKeyFromAgent(accountName); err != nil {
+		log.Printf("Warning: Failed to remove SSH key from agent: %v", err)
+	}
+
 	// Remove SSH key pair
 	if err := SSHClient.DeleteSSHKey(accountName); err != nil {
 		log.Printf("Warning: Failed to delete SSH key: %v", err)

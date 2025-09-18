@@ -7,10 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	forceDelete bool
-)
-
 var deleteCmd = &cobra.Command{
 	Use:     "delete <account_name>",
 	Aliases: []string{"remove", "rm"},
@@ -25,6 +21,11 @@ This will:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accountName := args[0]
 
+		forceDelete, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			return fmt.Errorf("failed to read force flag: %w", err)
+		}
+
 		// Confirm before deleting
 		if !forceDelete {
 			fmt.Printf("⚠️  WARNING: This will permanently delete the account '%s' and its SSH keys.\n", accountName)
@@ -38,12 +39,14 @@ This will:
 			}
 		}
 
+		fmt.Printf("🔑 Removing SSH key for '%s' from agent before deleting files...\n", accountName)
+
 		// Delete the account
 		if err := multigit.DeleteAccount(accountName); err != nil {
 			return fmt.Errorf("failed to delete account: %w", err)
 		}
 
-		fmt.Printf("✅ Account '%s' has been deleted successfully\n", accountName)
+		fmt.Printf("✅ Account '%s' has been deleted successfully and its SSH key was removed from the agent\n", accountName)
 		return nil
 	},
 }

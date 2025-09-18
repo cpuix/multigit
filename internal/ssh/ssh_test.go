@@ -221,6 +221,7 @@ func TestDeleteSSHKey(t *testing.T) {
 		expectError bool
 		useFileFunc bool // Whether to use DeleteSSHKeyFile instead of DeleteSSHKey
 		fileTypes   []ssh.KeyType
+		hook        func(*testing.T, string)
 	}{
 		{
 			name: "Delete existing RSA key by account name",
@@ -341,6 +342,15 @@ func TestDeleteSSHKey(t *testing.T) {
 			},
 			expectError: true,
 			useFileFunc: true,
+			hook: func(t *testing.T, keyPath string) {
+				restore := ssh.SetFileOperationHooks(nil, func(path string) error {
+					if path == keyPath || path == keyPath+".pub" {
+						return &os.PathError{Op: "remove", Path: path, Err: os.ErrPermission}
+					}
+					return os.Remove(path)
+				})
+				t.Cleanup(restore)
+			},
 		},
 	}
 
@@ -360,6 +370,10 @@ func TestDeleteSSHKey(t *testing.T) {
 
 			// Setup test case
 			keyOrAccount, filesToCheck := tt.setup(t, sshDir)
+
+			if tt.hook != nil {
+				tt.hook(t, keyOrAccount)
+			}
 
 			// Run cleanup after test if provided
 			if tt.cleanup != nil {
@@ -608,6 +622,7 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 		setup       func(t *testing.T, tempDir string) (string, []string) // returns keyFile and list of files that should exist
 		expectError bool
 		expectFiles []string // files that should exist after the operation
+		hook        func(*testing.T, string)
 	}{
 		{
 			name: "Delete existing key file",
@@ -641,11 +656,11 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				// Create only a public key file
 				keyFile := filepath.Join(tempDir, "id_rsa_public_only")
 				pubKeyFile := keyFile + ".pub"
-				
+
 				// Create a dummy public key file
 				err := os.WriteFile(pubKeyFile, []byte("ssh-rsa AAAAB3NzaC1yc2E test@example.com"), 0644)
 				require.NoError(t, err, "Failed to create test public key")
-				
+
 				return keyFile, []string{
 					pubKeyFile,
 				}
@@ -660,21 +675,30 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				keyDir := filepath.Join(tempDir, "key_dir")
 				err := os.MkdirAll(keyDir, 0700)
 				require.NoError(t, err, "Failed to create directory")
-				
+
 				// Make it inaccessible to cause a stat error
 				err = os.Chmod(keyDir, 0000) // No permissions
 				require.NoError(t, err, "Failed to set directory permissions")
-				
+
 				t.Cleanup(func() {
 					// Restore permissions for cleanup
 					os.Chmod(keyDir, 0700)
 				})
-				
+
 				keyFile := filepath.Join(keyDir, "id_rsa")
 				return keyFile, []string{}
 			},
 			expectError: true,
 			expectFiles: []string{},
+			hook: func(t *testing.T, keyPath string) {
+				restore := ssh.SetFileOperationHooks(func(path string) (os.FileInfo, error) {
+					if path == keyPath {
+						return nil, &os.PathError{Op: "stat", Path: path, Err: os.ErrPermission}
+					}
+					return os.Stat(path)
+				}, nil)
+				t.Cleanup(restore)
+			},
 		},
 		{
 			name: "Error checking public key file",
@@ -683,18 +707,18 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				keyFile := filepath.Join(tempDir, "id_rsa_error")
 				err := os.WriteFile(keyFile, []byte("dummy private key"), 0600)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Create a directory with the same name as the public key file
 				pubKeyDir := keyFile + ".pub"
 				err = os.MkdirAll(pubKeyDir, 0700)
 				require.NoError(t, err, "Failed to create directory")
-				
+
 				// Create a file inside the directory to ensure os.Remove fails
 				// (can't remove non-empty directory)
 				dummyFile := filepath.Join(pubKeyDir, "dummy")
 				err = os.WriteFile(dummyFile, []byte("dummy"), 0600)
 				require.NoError(t, err, "Failed to create dummy file")
-				
+
 				return keyFile, []string{
 					keyFile,
 					pubKeyDir,
@@ -730,6 +754,15 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 			},
 			expectError: true,
 			expectFiles: []string{"id_rsa_protected", "id_rsa_protected.pub"}, // Files should still exist
+			hook: func(t *testing.T, keyPath string) {
+				restore := ssh.SetFileOperationHooks(nil, func(path string) error {
+					if path == keyPath || path == keyPath+".pub" {
+						return &os.PathError{Op: "remove", Path: path, Err: os.ErrPermission}
+					}
+					return os.Remove(path)
+				})
+				t.Cleanup(restore)
+			},
 		},
 	}
 
@@ -739,6 +772,10 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 
 			// Setup test case
 			keyFile, filesToCheck := tt.setup(t, tempDir)
+
+			if tt.hook != nil {
+				tt.hook(t, keyFile)
+			}
 
 			// Run the function being tested
 			err := ssh.DeleteSSHKeyFile(keyFile)
@@ -943,7 +980,7 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Reset SSH_AUTH_SOCK to default for each test case
 			os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
-			
+
 			// Setup test case
 			tc.setup()
 
@@ -956,6 +993,136 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 				assert.Contains(t, err.Error(), tc.expectedError, "Error message should contain expected text")
 			} else {
 				require.NoError(t, err, "Unexpected error")
+			}
+		})
+	}
+}
+
+func TestRemoveSSHKeyFromAgent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	sshDir := filepath.Join(tempDir, ".ssh")
+	require.NoError(t, os.MkdirAll(sshDir, 0700), "Failed to create .ssh directory")
+
+	accountName := "test-agent-account"
+	keyFile := filepath.Join(sshDir, "id_ed25519_"+accountName)
+
+	oldExecCommand := ssh.ExecCommand
+	defer func() { ssh.ExecCommand = oldExecCommand }()
+
+	oldSSHAuthSock := os.Getenv("SSH_AUTH_SOCK")
+	defer os.Setenv("SSH_AUTH_SOCK", oldSSHAuthSock)
+
+	type commandTracker struct {
+		count int
+		args  []string
+	}
+
+	tests := []struct {
+		name          string
+		setup         func(*testing.T, string, *commandTracker)
+		expectedError string
+		expectedCalls int
+		expectedArgs  []string
+	}{
+		{
+			name: "Successfully remove key from agent",
+			setup: func(t *testing.T, keyPath string, tracker *commandTracker) {
+				os.Remove(keyPath)
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				require.NoError(t, err, "Failed to generate test key")
+				keyData := ssh.MarshalED25519PrivateKey(privKey, "test@example.com")
+				require.NoError(t, os.WriteFile(keyPath, keyData, 0600), "Failed to write test key")
+
+				ssh.ExecCommand = func(name string, arg ...string) *exec.Cmd {
+					require.Equal(t, "ssh-add", name)
+					require.Equal(t, []string{"-d", keyPath}, arg)
+					tracker.count++
+					tracker.args = append([]string{}, arg...)
+					return mockCommand("ssh-add", true)(name, arg...)
+				}
+			},
+			expectedCalls: 1,
+			expectedArgs:  []string{"-d", keyFile},
+		},
+		{
+			name: "SSH agent not running",
+			setup: func(t *testing.T, keyPath string, tracker *commandTracker) {
+				os.Remove(keyPath)
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				require.NoError(t, err, "Failed to generate test key")
+				keyData := ssh.MarshalED25519PrivateKey(privKey, "test@example.com")
+				require.NoError(t, os.WriteFile(keyPath, keyData, 0600), "Failed to write test key")
+
+				ssh.ExecCommand = func(name string, arg ...string) *exec.Cmd {
+					t.Fatalf("ssh-add should not be called when agent is not running")
+					return exec.Command("false")
+				}
+				os.Unsetenv("SSH_AUTH_SOCK")
+			},
+			expectedError: "SSH agent is not running",
+			expectedCalls: 0,
+		},
+		{
+			name: "SSH remove command fails",
+			setup: func(t *testing.T, keyPath string, tracker *commandTracker) {
+				os.Remove(keyPath)
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				require.NoError(t, err, "Failed to generate test key")
+				keyData := ssh.MarshalED25519PrivateKey(privKey, "test@example.com")
+				require.NoError(t, os.WriteFile(keyPath, keyData, 0600), "Failed to write test key")
+
+				ssh.ExecCommand = func(name string, arg ...string) *exec.Cmd {
+					require.Equal(t, "ssh-add", name)
+					require.Equal(t, []string{"-d", keyPath}, arg)
+					tracker.count++
+					tracker.args = append([]string{}, arg...)
+					return mockCommand("ssh-add", false)(name, arg...)
+				}
+			},
+			expectedError: "failed to remove key",
+			expectedCalls: 1,
+			expectedArgs:  []string{"-d", keyFile},
+		},
+		{
+			name: "No key files found",
+			setup: func(t *testing.T, keyPath string, tracker *commandTracker) {
+				os.Remove(keyPath)
+				ssh.ExecCommand = func(name string, arg ...string) *exec.Cmd {
+					t.Fatalf("ssh-add should not be called when no key file exists")
+					return exec.Command("false")
+				}
+			},
+			expectedCalls: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
+
+			ssh.ExecCommand = oldExecCommand
+			defer func() { ssh.ExecCommand = oldExecCommand }()
+			tracker := &commandTracker{}
+
+			tc.setup(t, keyFile, tracker)
+
+			err := ssh.RemoveSSHKeyFromAgent(accountName)
+
+			if tc.expectedError != "" {
+				require.Error(t, err, "Expected error but got none")
+				assert.Contains(t, err.Error(), tc.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tc.expectedCalls, tracker.count, "Unexpected number of ssh-add invocations")
+			if tc.expectedArgs != nil {
+				assert.Equal(t, tc.expectedArgs, tracker.args, "Unexpected arguments passed to ssh-add")
 			}
 		})
 	}
