@@ -6,13 +6,13 @@ import (
 )
 
 // createSSHKey is a wrapper around ssh.CreateSSHKey
-func createSSHKey(accountName, accountEmail, passphrase string, keyType ssh.KeyType) error {
-	return SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType)
+func createSSHKey(accountName, accountEmail, passphrase string, keyType ssh.KeyType, keyFileOverride *string) error {
+	return SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType, keyFileOverride)
 }
 
 // CreateSSHKeyForTesting exposes createSSHKey for testing
-func CreateSSHKeyForTesting(accountName, accountEmail, passphrase string, keyType ssh.KeyType) error {
-	return createSSHKey(accountName, accountEmail, passphrase, keyType)
+func CreateSSHKeyForTesting(accountName, accountEmail, passphrase string, keyType ssh.KeyType, keyFileOverride *string) error {
+	return createSSHKey(accountName, accountEmail, passphrase, keyType, keyFileOverride)
 }
 
 // addSSHKeyToAgent is a wrapper around ssh.AddSSHKeyToAgent

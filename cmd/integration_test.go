@@ -42,9 +42,21 @@ func TestFullWorkflow(t *testing.T) {
 		cmd.CfgFile = oldCfgFile
 	}()
 
+	oldAddToAgent := cmd.SSHAddToAgentFunc
+	cmd.SSHAddToAgentFunc = func(accountName string) error {
+		return nil
+	}
+	defer func() { cmd.SSHAddToAgentFunc = oldAddToAgent }()
+
+	oldRunGit := cmd.RunGitCommand
+	cmd.RunGitCommand = func(args ...string) error {
+		return nil
+	}
+	defer func() { cmd.RunGitCommand = oldRunGit }()
+
 	// Create a mock SSH implementation
 	mockSSH := new(MockSSH)
-	
+
 	// Save original SSH client
 	oldSSHClient := multigit.SSHClient
 	// Replace with our mock
@@ -56,7 +68,7 @@ func TestFullWorkflow(t *testing.T) {
 	cmd.InitConfig()
 
 	// Setup mock expectations for create command
-	mockSSH.On("CreateSSHKey", "test-account", "test@example.com", "", ssh.KeyTypeED25519).Return(nil)
+	mockSSH.On("CreateSSHKey", "test-account", "test@example.com", "", ssh.KeyTypeED25519, (*string)(nil)).Return(nil)
 	mockSSH.On("AddSSHKeyToAgent", "test-account").Return(nil)
 	mockSSH.On("AddSSHConfigEntry", "test-account").Return(nil)
 
@@ -198,9 +210,21 @@ func TestErrorConditions(t *testing.T) {
 		cmd.CfgFile = oldCfgFile
 	}()
 
+	oldAddToAgent := cmd.SSHAddToAgentFunc
+	cmd.SSHAddToAgentFunc = func(accountName string) error {
+		return nil
+	}
+	defer func() { cmd.SSHAddToAgentFunc = oldAddToAgent }()
+
+	oldRunGit := cmd.RunGitCommand
+	cmd.RunGitCommand = func(args ...string) error {
+		return nil
+	}
+	defer func() { cmd.RunGitCommand = oldRunGit }()
+
 	// Create a mock SSH implementation
 	mockSSH := new(MockSSH)
-	
+
 	// Save original SSH client
 	oldSSHClient := multigit.SSHClient
 	// Replace with our mock
@@ -215,7 +239,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("CreateAccountWithInvalidEmail", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
@@ -225,7 +249,7 @@ func TestErrorConditions(t *testing.T) {
 		// Execute create command with invalid email
 		cmd.RootCmd.SetArgs([]string{"create", "test-account", "invalid-email"})
 		err := cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer
@@ -243,7 +267,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("UseNonExistentAccount", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
@@ -253,7 +277,7 @@ func TestErrorConditions(t *testing.T) {
 		// Execute use command with non-existent account
 		cmd.RootCmd.SetArgs([]string{"use", "non-existent-account"})
 		err := cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer
@@ -270,7 +294,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("DeleteNonExistentAccount", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
@@ -280,7 +304,7 @@ func TestErrorConditions(t *testing.T) {
 		// Execute delete command with non-existent account
 		cmd.RootCmd.SetArgs([]string{"delete", "non-existent-account", "-f"})
 		err := cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer
@@ -297,9 +321,9 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("CreateDuplicateAccount", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Setup mock expectations for first create
-		mockSSH.On("CreateSSHKey", "duplicate-account", "test@example.com", "", ssh.KeyTypeED25519).Return(nil)
+		mockSSH.On("CreateSSHKey", "duplicate-account", "test@example.com", "", ssh.KeyTypeED25519, (*string)(nil)).Return(nil)
 		mockSSH.On("AddSSHKeyToAgent", "duplicate-account").Return(nil)
 		mockSSH.On("AddSSHConfigEntry", "duplicate-account").Return(nil)
 
@@ -317,7 +341,7 @@ func TestErrorConditions(t *testing.T) {
 		// Try to create duplicate account
 		cmd.RootCmd.SetArgs([]string{"create", "duplicate-account", "another@example.com"})
 		err = cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer

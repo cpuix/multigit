@@ -12,7 +12,7 @@ const (
 
 // SSHOperations defines the interface for SSH-related operations
 type SSHOperations interface {
-	CreateSSHKey(accountName, email, passphrase string, keyType KeyType) error
+	CreateSSHKey(accountName, email, passphrase string, keyType KeyType, keyFileOverride *string) error
 	// AddSSHKeyToAgent adds an SSH key to the agent. If keyFile is provided, it will be used directly.
 	// Otherwise, it will look for the key in ~/.ssh/id_ed25519_{accountName}
 	AddSSHKeyToAgent(accountOrKeyFile string) error
@@ -25,8 +25,8 @@ type SSHOperations interface {
 type DefaultSSH struct{}
 
 // CreateSSHKey creates a new SSH key pair
-func (d *DefaultSSH) CreateSSHKey(accountName, email, passphrase string, keyType KeyType) error {
-	return CreateSSHKey(accountName, email, passphrase, keyType)
+func (d *DefaultSSH) CreateSSHKey(accountName, email, passphrase string, keyType KeyType, keyFileOverride *string) error {
+	return CreateSSHKey(accountName, email, passphrase, keyType, keyFileOverride)
 }
 
 // AddSSHKeyToAgent adds the SSH key to the SSH agent

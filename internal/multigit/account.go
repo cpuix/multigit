@@ -56,7 +56,7 @@ func CreateAccount(accountName, accountEmail, passphrase string, keyType ssh.Key
 	}
 
 	// Create SSH key pair
-	if err := SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType); err != nil {
+	if err := SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType, nil); err != nil {
 		return fmt.Errorf("failed to create SSH key: %w", err)
 	}
 
