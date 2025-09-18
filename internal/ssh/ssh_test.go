@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,6 +30,17 @@ var (
 		return ssh.ValidatePrivateKey(keyData)
 	}
 )
+
+func isRootUser() bool {
+	current, err := user.Current()
+	if err != nil {
+		return false
+	}
+	if current.Uid == "0" {
+		return true
+	}
+	return strings.EqualFold(current.Username, "root")
+}
 
 // mockCommand is used to mock exec.Command
 func mockCommand(command string, success bool) ssh.CommandRunner {
@@ -221,6 +233,7 @@ func TestDeleteSSHKey(t *testing.T) {
 		expectError bool
 		useFileFunc bool // Whether to use DeleteSSHKeyFile instead of DeleteSSHKey
 		fileTypes   []ssh.KeyType
+		skipIfRoot  bool
 	}{
 		{
 			name: "Delete existing RSA key by account name",
@@ -341,11 +354,16 @@ func TestDeleteSSHKey(t *testing.T) {
 			},
 			expectError: true,
 			useFileFunc: true,
+			skipIfRoot:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipIfRoot && isRootUser() {
+				t.Skip("Skipping permission-dependent test when running as root")
+			}
+
 			tempDir := t.TempDir()
 
 			// Override home directory for this test
@@ -608,6 +626,7 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 		setup       func(t *testing.T, tempDir string) (string, []string) // returns keyFile and list of files that should exist
 		expectError bool
 		expectFiles []string // files that should exist after the operation
+		skipIfRoot  bool
 	}{
 		{
 			name: "Delete existing key file",
@@ -641,11 +660,11 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				// Create only a public key file
 				keyFile := filepath.Join(tempDir, "id_rsa_public_only")
 				pubKeyFile := keyFile + ".pub"
-				
+
 				// Create a dummy public key file
 				err := os.WriteFile(pubKeyFile, []byte("ssh-rsa AAAAB3NzaC1yc2E test@example.com"), 0644)
 				require.NoError(t, err, "Failed to create test public key")
-				
+
 				return keyFile, []string{
 					pubKeyFile,
 				}
@@ -660,21 +679,22 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				keyDir := filepath.Join(tempDir, "key_dir")
 				err := os.MkdirAll(keyDir, 0700)
 				require.NoError(t, err, "Failed to create directory")
-				
+
 				// Make it inaccessible to cause a stat error
 				err = os.Chmod(keyDir, 0000) // No permissions
 				require.NoError(t, err, "Failed to set directory permissions")
-				
+
 				t.Cleanup(func() {
 					// Restore permissions for cleanup
 					os.Chmod(keyDir, 0700)
 				})
-				
+
 				keyFile := filepath.Join(keyDir, "id_rsa")
 				return keyFile, []string{}
 			},
 			expectError: true,
 			expectFiles: []string{},
+			skipIfRoot:  true,
 		},
 		{
 			name: "Error checking public key file",
@@ -683,18 +703,18 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				keyFile := filepath.Join(tempDir, "id_rsa_error")
 				err := os.WriteFile(keyFile, []byte("dummy private key"), 0600)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Create a directory with the same name as the public key file
 				pubKeyDir := keyFile + ".pub"
 				err = os.MkdirAll(pubKeyDir, 0700)
 				require.NoError(t, err, "Failed to create directory")
-				
+
 				// Create a file inside the directory to ensure os.Remove fails
 				// (can't remove non-empty directory)
 				dummyFile := filepath.Join(pubKeyDir, "dummy")
 				err = os.WriteFile(dummyFile, []byte("dummy"), 0600)
 				require.NoError(t, err, "Failed to create dummy file")
-				
+
 				return keyFile, []string{
 					keyFile,
 					pubKeyDir,
@@ -730,11 +750,16 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 			},
 			expectError: true,
 			expectFiles: []string{"id_rsa_protected", "id_rsa_protected.pub"}, // Files should still exist
+			skipIfRoot:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipIfRoot && isRootUser() {
+				t.Skip("Skipping permission-dependent test when running as root")
+			}
+
 			tempDir := t.TempDir()
 
 			// Setup test case
@@ -849,6 +874,44 @@ func TestValidatePrivateKey(t *testing.T) {
 	})
 }
 
+func TestResolveKeyPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	info, err := ssh.ResolveKeyPath("example")
+	require.NoError(t, err)
+	assert.False(t, info.Exists)
+
+	expectedEd, err := ssh.DefaultKeyPath("example", ssh.KeyTypeED25519)
+	require.NoError(t, err)
+	assert.Equal(t, expectedEd, info.Path)
+	assert.Equal(t, ssh.KeyTypeED25519, info.Type)
+
+	rsaPath, err := ssh.DefaultKeyPath("example", ssh.KeyTypeRSA)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(rsaPath), 0700))
+	require.NoError(t, os.WriteFile(rsaPath, []byte("rsa"), 0600))
+
+	info, err = ssh.ResolveKeyPath("example")
+	require.NoError(t, err)
+	assert.True(t, info.Exists)
+	assert.Equal(t, rsaPath, info.Path)
+	assert.Equal(t, ssh.KeyTypeRSA, info.Type)
+
+	edPath, err := ssh.DefaultKeyPath("example", ssh.KeyTypeED25519)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(edPath, []byte("ed"), 0600))
+
+	info, err = ssh.ResolveKeyPath("example")
+	require.NoError(t, err)
+	assert.True(t, info.Exists)
+	assert.Equal(t, edPath, info.Path)
+	assert.Equal(t, ssh.KeyTypeED25519, info.Type)
+}
+
 func TestAddSSHKeyToAgent(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -943,7 +1006,7 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Reset SSH_AUTH_SOCK to default for each test case
 			os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
-			
+
 			// Setup test case
 			tc.setup()
 

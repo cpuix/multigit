@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /multigit ./cmd/multigit
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /multigit ./
 
 # Final stage
 FROM alpine:3.18

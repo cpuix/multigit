@@ -91,6 +91,11 @@ multigit create work-account name.surname@company.com
 multigit create personal me@mydomain.com -p "strong-password"
 ```
 
+> **Note:** Multigit creates modern ED25519 SSH keys by default and stores them at
+> `~/.ssh/id_ed25519_<account_name>`. If you previously generated an RSA key for
+> the same account, Multigit automatically detects it when listing accounts or
+> configuring Git.
+
 ### Switching Between Accounts
 
 ```bash

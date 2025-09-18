@@ -50,5 +50,5 @@ This will:
 
 func init() {
 	RootCmd.AddCommand(deleteCmd)
-	deleteCmd.Flags().BoolP("force", "f", false, "Force deletion without confirmation")
+	deleteCmd.Flags().BoolVarP(&forceDelete, "force", "f", false, "Force deletion without confirmation")
 }

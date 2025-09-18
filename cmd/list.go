@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/cpuix/multigit/internal/multigit"
+	"github.com/cpuix/multigit/internal/ssh"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -47,12 +47,13 @@ var listCmd = &cobra.Command{
 			fmt.Printf("  Email: %s\n", account.Email)
 
 			// Show SSH key info if available
-			homeDir, _ := os.UserHomeDir()
-			keyPath := fmt.Sprintf("%s/.ssh/id_rsa_%s", homeDir, name)
-			if _, err := os.Stat(keyPath); err == nil {
-				fmt.Printf("  SSH Key: %s\n", keyPath)
+			keyInfo, err := ssh.ResolveKeyPath(name)
+			if err != nil {
+				fmt.Printf("  SSH Key: %s\n", color.RedString("failed to resolve key path: %v", err))
+			} else if keyInfo.Exists {
+				fmt.Printf("  SSH Key: %s (%s)\n", keyInfo.Path, keyInfo.Type)
 			} else {
-				fmt.Printf("  SSH Key: %s (not found)\n", color.YellowString(keyPath))
+				fmt.Printf("  SSH Key: %s (not found)\n", color.YellowString(keyInfo.Path))
 			}
 
 			// Show active status
