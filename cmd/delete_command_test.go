@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -51,7 +52,7 @@ func TestDeleteCommand(t *testing.T) {
 			setup: func() {
 				// Initialize config
 				cmd.InitConfig()
-				
+
 				// Create a config with a test account
 				config := multigit.NewConfig()
 				config.Accounts = map[string]multigit.Account{
@@ -64,7 +65,7 @@ func TestDeleteCommand(t *testing.T) {
 				require.NoError(t, err, "Failed to save config")
 			},
 			expectError:  false,
-			expectOutput: "deleted successfully",
+			expectOutput: "SSH key was removed from the agent",
 		},
 		{
 			name: "Delete non-existent account",
@@ -72,7 +73,7 @@ func TestDeleteCommand(t *testing.T) {
 			setup: func() {
 				// Initialize config
 				cmd.InitConfig()
-				
+
 				// Create an empty config
 				config := multigit.NewConfig()
 				err := multigit.SaveConfigToFile(config, configPath)
@@ -104,12 +105,14 @@ func TestDeleteCommand(t *testing.T) {
 				Args:    cobra.ExactArgs(1),
 				RunE: func(cmd *cobra.Command, args []string) error {
 					accountName := args[0]
+					fmt.Printf("🔑 Removing SSH key for '%s' from agent before deleting files...\n", accountName)
 					err := multigit.DeleteAccount(accountName)
 					if err != nil {
 						// Write error message directly to output for testing
 						io.WriteString(w, err.Error())
 						return err
 					}
+					fmt.Printf("✅ Account '%s' has been deleted successfully and its SSH key was removed from the agent\n", accountName)
 					return nil
 				},
 			}

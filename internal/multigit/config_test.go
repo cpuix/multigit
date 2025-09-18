@@ -60,7 +60,7 @@ func TestLoadConfigFromFile(t *testing.T) {
 
 	t.Run("Load non-existent config file", func(t *testing.T) {
 		nonExistentPath := filepath.Join(tempDir, "non_existent.json")
-		
+
 		// Ensure the file doesn't exist
 		_, err := os.Stat(nonExistentPath)
 		require.True(t, os.IsNotExist(err), "Test file should not exist")
@@ -73,7 +73,7 @@ func TestLoadConfigFromFile(t *testing.T) {
 
 	t.Run("Load invalid JSON config file", func(t *testing.T) {
 		invalidConfigPath := filepath.Join(tempDir, "invalid_config.json")
-		
+
 		// Write invalid JSON to the file
 		err := os.WriteFile(invalidConfigPath, []byte("this is not valid JSON"), 0600)
 		require.NoError(t, err, "Failed to write invalid config file")
@@ -92,7 +92,7 @@ func TestSaveConfigToFile(t *testing.T) {
 
 	t.Run("Save config to new file", func(t *testing.T) {
 		configPath := filepath.Join(tempDir, "new_config.json")
-		
+
 		// Create a test config
 		testConfig := multigit.Config{
 			Accounts: map[string]multigit.Account{
@@ -139,7 +139,7 @@ func TestSaveConfigToFile(t *testing.T) {
 
 	t.Run("Save config with invalid active references", func(t *testing.T) {
 		configPath := filepath.Join(tempDir, "invalid_refs_config.json")
-		
+
 		// Create a test config with invalid active references
 		testConfig := multigit.Config{
 			Accounts:      map[string]multigit.Account{},
@@ -175,6 +175,12 @@ func TestSaveConfigToFile(t *testing.T) {
 		noWriteDir := filepath.Join(tempDir, "no_write_dir")
 		err := os.MkdirAll(noWriteDir, 0500) // read and execute, but no write
 		require.NoError(t, err, "Failed to create directory with no write permission")
+
+		probeFile := filepath.Join(noWriteDir, "probe")
+		if probeErr := os.WriteFile(probeFile, []byte("probe"), 0600); probeErr == nil {
+			os.Remove(probeFile)
+			t.Skip("Skipping permission test because writes succeed in restricted directory")
+		}
 
 		// Try to save config to a file in the no-write directory
 		configPath := filepath.Join(noWriteDir, "config.json")

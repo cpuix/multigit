@@ -26,6 +26,31 @@ type CommandRunner func(name string, arg ...string) *exec.Cmd
 // By default, it's set to exec.Command, but can be replaced in tests.
 var ExecCommand CommandRunner = exec.Command
 
+var (
+	statFile   = os.Stat
+	removeFile = os.Remove
+)
+
+// SetFileOperationHooks allows tests to override filesystem operations and returns a restore function.
+// Passing nil for a hook keeps the existing behavior unchanged.
+func SetFileOperationHooks(statHook func(string) (os.FileInfo, error), removeHook func(string) error) func() {
+	previousStat := statFile
+	previousRemove := removeFile
+
+	if statHook != nil {
+		statFile = statHook
+	}
+
+	if removeHook != nil {
+		removeFile = removeHook
+	}
+
+	return func() {
+		statFile = previousStat
+		removeFile = previousRemove
+	}
+}
+
 const (
 	rsaKeyBitSize = 4096
 	// ED25519 keys are always 256 bits (32 bytes) when using the standard implementation
@@ -327,6 +352,113 @@ func AddSSHKeyToAgent(accountOrKeyFile string) error {
 	return nil
 }
 
+// RemoveSSHKeyFromAgent removes the SSH key from the SSH agent before the files are deleted from disk.
+// The function supports both direct key file paths and account names.
+func RemoveSSHKeyFromAgent(accountOrKeyFile string) error {
+	var keyFiles []string
+
+	// Handle direct file paths first
+	if filepath.IsAbs(accountOrKeyFile) || strings.HasPrefix(accountOrKeyFile, ".") || strings.Contains(accountOrKeyFile, "/") {
+		absKeyPath, err := filepath.Abs(accountOrKeyFile)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for key file: %w", err)
+		}
+
+		if _, err := os.Stat(absKeyPath); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to access key file %s: %w", absKeyPath, err)
+		}
+
+		keyFiles = append(keyFiles, absKeyPath)
+	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+
+		sshDir := filepath.Join(homeDir, ".ssh")
+		accountName := filepath.Base(accountOrKeyFile)
+
+		candidates := []string{}
+		patterns := []string{
+			"id_ed25519_%s",
+			"id_rsa_%s",
+		}
+
+		for _, pattern := range patterns {
+			candidates = append(candidates, filepath.Join(sshDir, fmt.Sprintf(pattern, accountOrKeyFile)))
+			if accountName != accountOrKeyFile {
+				candidates = append(candidates, filepath.Join(sshDir, fmt.Sprintf(pattern, accountName)))
+			}
+		}
+
+		if entries, err := os.ReadDir(sshDir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+
+				name := entry.Name()
+				if strings.Contains(name, accountName) && !strings.HasSuffix(name, ".pub") {
+					candidates = append(candidates, filepath.Join(sshDir, name))
+				}
+			}
+		}
+
+		dedup := make(map[string]struct{})
+		for _, candidate := range candidates {
+			if candidate == "" {
+				continue
+			}
+
+			absCandidate, err := filepath.Abs(candidate)
+			if err != nil {
+				return fmt.Errorf("failed to get absolute path for key file: %w", err)
+			}
+
+			if _, exists := dedup[absCandidate]; exists {
+				continue
+			}
+			dedup[absCandidate] = struct{}{}
+
+			if _, err := os.Stat(absCandidate); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return fmt.Errorf("failed to access key file %s: %w", absCandidate, err)
+			}
+
+			keyFiles = append(keyFiles, absCandidate)
+		}
+	}
+
+	if len(keyFiles) == 0 {
+		return nil
+	}
+
+	if os.Getenv("SSH_AUTH_SOCK") == "" {
+		return fmt.Errorf("SSH agent is not running. Please start the SSH agent and try again")
+	}
+
+	var lastErr error
+	for _, keyFile := range keyFiles {
+		cmd := ExecCommand("ssh-add", "-d", keyFile)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			errMsg := fmt.Errorf("failed to remove key %s from SSH agent: %s - %w", keyFile, strings.TrimSpace(string(output)), err)
+			fmt.Println(errMsg)
+			lastErr = errMsg
+			continue
+		}
+
+		fmt.Printf("✅ SSH key %s removed from SSH agent\n", keyFile)
+	}
+
+	return lastErr
+}
+
 // AddSSHConfigEntry adds an entry to the SSH config file
 func AddSSHConfigEntry(accountName string) error {
 	homeDir, err := os.UserHomeDir()
@@ -400,7 +532,7 @@ func AddSSHConfigEntry(accountName string) error {
 
 func DeleteSSHKey(accountOrKeyFile string) error {
 	// First, check if the input is a file path
-	if _, err := os.Stat(accountOrKeyFile); err == nil {
+	if _, err := statFile(accountOrKeyFile); err == nil {
 		// It's a file path, delete it directly
 		log.Printf("Input is a file path, deleting directly: %s", accountOrKeyFile)
 		return DeleteSSHKeyFile(accountOrKeyFile)
@@ -484,7 +616,7 @@ func DeleteSSHKey(accountOrKeyFile string) error {
 			dedupedFiles[keyFile] = true
 
 			// Check if file exists before trying to delete
-			if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+			if _, err := statFile(keyFile); os.IsNotExist(err) {
 				// File doesn't exist, skip to next file
 				fmt.Printf("File %s does not exist, skipping\n", keyFile)
 				continue
@@ -521,9 +653,9 @@ func DeleteSSHKeyFile(keyFile string) error {
 
 	// Remove private key if it exists
 	fmt.Printf("Checking if private key exists: %s\n", keyFile)
-	if _, err := os.Stat(keyFile); err == nil {
+	if _, err := statFile(keyFile); err == nil {
 		fmt.Printf("Attempting to remove private key: %s\n", keyFile)
-		if err := os.Remove(keyFile); err != nil {
+		if err := removeFile(keyFile); err != nil {
 			if os.IsNotExist(err) {
 				fmt.Printf("Private key %s already deleted\n", keyFile)
 			} else {
@@ -545,9 +677,9 @@ func DeleteSSHKeyFile(keyFile string) error {
 	// Remove public key if it exists
 	publicKeyFile := fmt.Sprintf("%s.pub", keyFile)
 	fmt.Printf("Checking if public key exists: %s\n", publicKeyFile)
-	if _, err := os.Stat(publicKeyFile); err == nil {
+	if _, err := statFile(publicKeyFile); err == nil {
 		fmt.Printf("Attempting to remove public key: %s\n", publicKeyFile)
-		if err := os.Remove(publicKeyFile); err != nil {
+		if err := removeFile(publicKeyFile); err != nil {
 			errMsg := fmt.Errorf("failed to remove public key %s: %w", publicKeyFile, err)
 			fmt.Println(errMsg)
 			if lastErr != nil {

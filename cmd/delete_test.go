@@ -7,6 +7,7 @@ import (
 	"github.com/cpuix/multigit/cmd"
 	"github.com/cpuix/multigit/internal/multigit"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,6 +57,7 @@ func TestDeleteAccount(t *testing.T) {
 		name        string
 		accountName string
 		setup       func()
+		mockSetup   func(*MockSSH)
 		expectError bool
 	}{
 		{
@@ -66,20 +68,35 @@ func TestDeleteAccount(t *testing.T) {
 				setupTestAccount(t, &config)
 				require.NoError(t, multigit.SaveConfig(config), "Failed to setup test account")
 			},
+			mockSetup: func(m *MockSSH) {
+				m.On("RemoveSSHKeyFromAgent", "test-account").Return(nil).Once()
+				m.On("DeleteSSHKey", "test-account").Return(nil).Once()
+				m.On("RemoveSSHConfigEntry", "test-account").Return(nil).Once()
+			},
 			expectError: false,
 		},
 		{
 			name:        "Delete non-existent account",
 			accountName: "nonexistent",
 			setup:       func() {},
+			mockSetup:   func(m *MockSSH) {},
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mockSSH := new(MockSSH)
+			oldSSHClient := multigit.SSHClient
+			multigit.SSHClient = mockSSH
+			defer func() { multigit.SSHClient = oldSSHClient }()
+
 			if tt.setup != nil {
 				tt.setup()
+			}
+
+			if tt.mockSetup != nil {
+				tt.mockSetup(mockSSH)
 			}
 
 			// Execute the delete function directly
@@ -88,6 +105,7 @@ func TestDeleteAccount(t *testing.T) {
 			// Verify the results
 			if tt.expectError {
 				assert.Error(t, err, "Expected error but got none")
+				mockSSH.AssertNotCalled(t, "RemoveSSHKeyFromAgent", mock.Anything)
 			} else {
 				assert.NoError(t, err, "Unexpected error")
 
@@ -95,7 +113,13 @@ func TestDeleteAccount(t *testing.T) {
 				config := multigit.LoadConfig()
 				_, exists := config.Accounts[tt.accountName]
 				assert.False(t, exists, "Account should be deleted")
+
+				require.GreaterOrEqual(t, len(mockSSH.Calls), 2, "Expected at least two SSH calls")
+				assert.Equal(t, "RemoveSSHKeyFromAgent", mockSSH.Calls[0].Method, "SSH agent removal should be first")
+				assert.Equal(t, "DeleteSSHKey", mockSSH.Calls[1].Method, "SSH key deletion should follow agent removal")
 			}
+
+			mockSSH.AssertExpectations(t)
 		})
 	}
 }
