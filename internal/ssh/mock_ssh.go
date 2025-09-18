@@ -8,8 +8,8 @@ type MockSSH struct {
 }
 
 // CreateSSHKey mocks the CreateSSHKey function
-func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType KeyType) error {
-	args := m.Called(accountName, email, passphrase, keyType)
+func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType KeyType, keyPathOverride string) error {
+	args := m.Called(accountName, email, passphrase, keyType, keyPathOverride)
 	return args.Error(0)
 }
 

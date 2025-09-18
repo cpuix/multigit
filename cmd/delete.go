@@ -23,6 +23,8 @@ This will:
 4. Remove the account from the multigit config`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() { forceDelete = false }()
+
 		accountName := args[0]
 
 		// Confirm before deleting
@@ -50,5 +52,5 @@ This will:
 
 func init() {
 	RootCmd.AddCommand(deleteCmd)
-	deleteCmd.Flags().BoolP("force", "f", false, "Force deletion without confirmation")
+	deleteCmd.Flags().BoolVarP(&forceDelete, "force", "f", false, "Force deletion without confirmation")
 }

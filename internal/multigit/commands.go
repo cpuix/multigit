@@ -7,12 +7,12 @@ import (
 
 // createSSHKey is a wrapper around ssh.CreateSSHKey
 func createSSHKey(accountName, accountEmail, passphrase string, keyType ssh.KeyType) error {
-	return SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType)
+	return SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType, "")
 }
 
 // CreateSSHKeyForTesting exposes createSSHKey for testing
 func CreateSSHKeyForTesting(accountName, accountEmail, passphrase string, keyType ssh.KeyType) error {
-	return createSSHKey(accountName, accountEmail, passphrase, keyType)
+	return SSHClient.CreateSSHKey(accountName, accountEmail, passphrase, keyType, "")
 }
 
 // addSSHKeyToAgent is a wrapper around ssh.AddSSHKeyToAgent
