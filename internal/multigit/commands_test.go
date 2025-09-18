@@ -12,7 +12,7 @@ import (
 func TestCreateSSHKey(t *testing.T) {
 	// Create a mock SSH client
 	mockSSH := new(MockSSH)
-	
+
 	// Save the original SSH client and restore it after the test
 	originalSSH := multigit.SSHClient
 	multigit.SSHClient = mockSSH
@@ -27,14 +27,14 @@ func TestCreateSSHKey(t *testing.T) {
 	keyType := ssh.KeyTypeED25519
 
 	// The mock should expect CreateSSHKey to be called with the specified parameters
-	mockSSH.On("CreateSSHKey", accountName, accountEmail, passphrase, keyType).Return(nil)
+	mockSSH.On("CreateSSHKey", accountName, accountEmail, passphrase, keyType, (*string)(nil)).Return(nil)
 
 	// Call the function being tested
-	err := multigit.CreateSSHKeyForTesting(accountName, accountEmail, passphrase, keyType)
-	
+	err := multigit.CreateSSHKeyForTesting(accountName, accountEmail, passphrase, keyType, nil)
+
 	// Verify the error is nil
 	assert.NoError(t, err)
-	
+
 	// Verify that the mock was called as expected
 	mockSSH.AssertExpectations(t)
 }
@@ -43,7 +43,7 @@ func TestCreateSSHKey(t *testing.T) {
 func TestAddSSHKeyToAgent(t *testing.T) {
 	// Create a mock SSH client
 	mockSSH := new(MockSSH)
-	
+
 	// Save the original SSH client and restore it after the test
 	originalSSH := multigit.SSHClient
 	multigit.SSHClient = mockSSH
@@ -59,10 +59,10 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 
 	// Call the function being tested
 	err := multigit.AddSSHKeyToAgentForTesting(accountName)
-	
+
 	// Verify the error is nil
 	assert.NoError(t, err)
-	
+
 	// Verify that the mock was called as expected
 	mockSSH.AssertExpectations(t)
 }
@@ -71,7 +71,7 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 func TestAddSSHConfigEntry(t *testing.T) {
 	// Create a mock SSH client
 	mockSSH := new(MockSSH)
-	
+
 	// Save the original SSH client and restore it after the test
 	originalSSH := multigit.SSHClient
 	multigit.SSHClient = mockSSH
@@ -87,10 +87,10 @@ func TestAddSSHConfigEntry(t *testing.T) {
 
 	// Call the function being tested
 	err := multigit.AddSSHConfigEntryForTesting(accountName)
-	
+
 	// Verify the error is nil
 	assert.NoError(t, err)
-	
+
 	// Verify that the mock was called as expected
 	mockSSH.AssertExpectations(t)
 }
@@ -99,7 +99,7 @@ func TestAddSSHConfigEntry(t *testing.T) {
 func TestCreateSSHKeyError(t *testing.T) {
 	// Create a mock SSH client
 	mockSSH := new(MockSSH)
-	
+
 	// Save the original SSH client and restore it after the test
 	originalSSH := multigit.SSHClient
 	multigit.SSHClient = mockSSH
@@ -115,15 +115,15 @@ func TestCreateSSHKeyError(t *testing.T) {
 
 	// The mock should expect CreateSSHKey to be called and return an error
 	mockError := assert.AnError
-	mockSSH.On("CreateSSHKey", accountName, accountEmail, passphrase, keyType).Return(mockError)
+	mockSSH.On("CreateSSHKey", accountName, accountEmail, passphrase, keyType, (*string)(nil)).Return(mockError)
 
 	// Call the function being tested
-	err := multigit.CreateSSHKeyForTesting(accountName, accountEmail, passphrase, keyType)
-	
+	err := multigit.CreateSSHKeyForTesting(accountName, accountEmail, passphrase, keyType, nil)
+
 	// Verify the error is returned
 	assert.Error(t, err)
 	assert.Equal(t, mockError, err)
-	
+
 	// Verify that the mock was called as expected
 	mockSSH.AssertExpectations(t)
 }
@@ -132,7 +132,7 @@ func TestCreateSSHKeyError(t *testing.T) {
 func TestAddSSHKeyToAgentError(t *testing.T) {
 	// Create a mock SSH client
 	mockSSH := new(MockSSH)
-	
+
 	// Save the original SSH client and restore it after the test
 	originalSSH := multigit.SSHClient
 	multigit.SSHClient = mockSSH
@@ -149,11 +149,11 @@ func TestAddSSHKeyToAgentError(t *testing.T) {
 
 	// Call the function being tested
 	err := multigit.AddSSHKeyToAgentForTesting(accountName)
-	
+
 	// Verify the error is returned
 	assert.Error(t, err)
 	assert.Equal(t, mockError, err)
-	
+
 	// Verify that the mock was called as expected
 	mockSSH.AssertExpectations(t)
 }
@@ -162,7 +162,7 @@ func TestAddSSHKeyToAgentError(t *testing.T) {
 func TestAddSSHConfigEntryError(t *testing.T) {
 	// Create a mock SSH client
 	mockSSH := new(MockSSH)
-	
+
 	// Save the original SSH client and restore it after the test
 	originalSSH := multigit.SSHClient
 	multigit.SSHClient = mockSSH
@@ -179,11 +179,11 @@ func TestAddSSHConfigEntryError(t *testing.T) {
 
 	// Call the function being tested
 	err := multigit.AddSSHConfigEntryForTesting(accountName)
-	
+
 	// Verify the error is returned
 	assert.Error(t, err)
 	assert.Equal(t, mockError, err)
-	
+
 	// Verify that the mock was called as expected
 	mockSSH.AssertExpectations(t)
 }

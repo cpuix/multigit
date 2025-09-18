@@ -30,8 +30,8 @@ type MockSSH struct {
 }
 
 // CreateSSHKey mocks the CreateSSHKey function
-func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType ssh.KeyType) error {
-	args := m.Called(accountName, email, passphrase, keyType)
+func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType ssh.KeyType, keyFileOverride *string) error {
+	args := m.Called(accountName, email, passphrase, keyType, keyFileOverride)
 	return args.Error(0)
 }
 
@@ -227,7 +227,7 @@ func TestCreateAccount(t *testing.T) {
 				return nil
 			},
 			setupMocks: func(m *MockSSH, accountName, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", accountName, email, passphrase, keyType).Return(nil)
+				m.On("CreateSSHKey", accountName, email, passphrase, keyType, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", accountName).Return(nil)
 				m.On("AddSSHConfigEntry", accountName).Return(nil)
 			},
@@ -248,7 +248,7 @@ func TestCreateAccount(t *testing.T) {
 				return nil
 			},
 			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
+				m.On("CreateSSHKey", name, email, passphrase, keyType, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(nil)
 				m.On("AddSSHConfigEntry", name).Return(nil)
 			},
@@ -281,7 +281,7 @@ func TestCreateAccount(t *testing.T) {
 				return errors.New("failed to save config")
 			},
 			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
+				m.On("CreateSSHKey", name, email, passphrase, keyType, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(nil)
 				m.On("AddSSHConfigEntry", name).Return(nil)
 			},
@@ -298,7 +298,7 @@ func TestCreateAccount(t *testing.T) {
 				// No additional setup needed
 			},
 			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(fmt.Errorf("failed to create SSH key"))
+				m.On("CreateSSHKey", name, email, passphrase, keyType, (*string)(nil)).Return(fmt.Errorf("failed to create SSH key"))
 			},
 			expectError: true,
 			errContains: "failed to create SSH key",
@@ -312,7 +312,7 @@ func TestCreateAccount(t *testing.T) {
 				// No additional setup needed
 			},
 			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
+				m.On("CreateSSHKey", name, email, passphrase, keyType, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(fmt.Errorf("failed to add SSH key to agent"))
 			},
 			expectError: true,
@@ -327,7 +327,7 @@ func TestCreateAccount(t *testing.T) {
 				// No additional setup needed
 			},
 			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
+				m.On("CreateSSHKey", name, email, passphrase, keyType, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(nil)
 				m.On("AddSSHConfigEntry", name).Return(fmt.Errorf("failed to add SSH config entry"))
 			},
@@ -344,7 +344,7 @@ func TestCreateAccount(t *testing.T) {
 				testConfig.Accounts = nil
 			},
 			setupMocks: func(m *MockSSH, name, email, passphrase string, keyType ssh.KeyType) {
-				m.On("CreateSSHKey", name, email, passphrase, keyType).Return(nil)
+				m.On("CreateSSHKey", name, email, passphrase, keyType, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", name).Return(nil)
 				m.On("AddSSHConfigEntry", name).Return(nil)
 			},
@@ -588,10 +588,6 @@ func TestGetConfigPath(t *testing.T) {
 	assert.Equal(t, expectedPath, path, "getConfigPath should return the expected path")
 }
 
-
-
-
-
 // TestGetActiveAccount tests the GetActiveAccount function
 func TestGetActiveAccount(t *testing.T) {
 	// Save the original HOME environment variable
@@ -711,7 +707,7 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations
 				mockSSH.On("DeleteSSHKey", "test-account").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "test-account").Return(nil)
@@ -762,7 +758,7 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations with an error for DeleteSSHKey
 				mockSSH.On("DeleteSSHKey", "test-account-ssh-error").Return(fmt.Errorf("SSH key deletion error"))
 				mockSSH.On("RemoveSSHConfigEntry", "test-account-ssh-error").Return(nil)
@@ -791,7 +787,7 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations with an error for RemoveSSHConfigEntry
 				mockSSH.On("DeleteSSHKey", "test-account-config-error").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "test-account-config-error").Return(fmt.Errorf("SSH config removal error"))
@@ -820,7 +816,7 @@ func TestDeleteAccount(t *testing.T) {
 				// Reset mock and set new expectations
 				mockSSH = new(MockSSH)
 				multigit.SSHClient = mockSSH
-				
+
 				// Mock the SSH operations
 				mockSSH.On("DeleteSSHKey", "active-account").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "active-account").Return(nil)
@@ -834,7 +830,7 @@ func TestDeleteAccount(t *testing.T) {
 			// Create a new temp directory for each test case
 			testDir := t.TempDir()
 			os.Setenv("HOME", testDir)
-			
+
 			// Set up the test environment
 			if tt.setup != nil {
 				tt.setup()

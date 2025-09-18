@@ -1,11 +1,14 @@
 package ssh
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/pem"
 	"fmt"
 	"log"
@@ -27,84 +30,134 @@ type CommandRunner func(name string, arg ...string) *exec.Cmd
 var ExecCommand CommandRunner = exec.Command
 
 const (
-	rsaKeyBitSize = 4096
+	rsaKeyBitSize     = 4096
+	openSSHKeyV1Magic = "openssh-key-v1\x00"
 	// ED25519 keys are always 256 bits (32 bytes) when using the standard implementation
 )
 
-// MarshalED25519PrivateKey converts an ED25519 private key to OpenSSH format
-func MarshalED25519PrivateKey(key ed25519.PrivateKey, comment string) []byte {
-	// The public key is the last 32 bytes of the private key
+// MarshalED25519PrivateKey converts an ED25519 private key to OpenSSH format.
+// When a non-empty passphrase is provided, the resulting key is encrypted using
+// bcrypt_pbkdf with AES-256-CTR, matching OpenSSH's native format.
+func MarshalED25519PrivateKey(key ed25519.PrivateKey, comment, passphrase string) ([]byte, error) {
 	publicKey := key.Public().(ed25519.PublicKey)
-
-	// The private key is the seed (first 32 bytes of the private key)
 	seed := key.Seed()
 
-	// Create the key data in OpenSSH format
-	keyData := struct {
-		CipherName   string
-		KdfName      string
-		KdfOpts      string
-		NumKeys      uint32
-		PubKey       []byte
-		PrivKeyBlock []byte
-	}{
-		CipherName: "none",
-		KdfName:    "none",
-		KdfOpts:    "",
-		NumKeys:    1,
+	checkBytes := make([]byte, 4)
+	if _, err := rand.Read(checkBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate check bytes: %w", err)
 	}
+	checkValue := binary.BigEndian.Uint32(checkBytes)
 
-	// Public key
-	pubKeyData := struct {
-		KeyType string
-		Key     []byte
-	}{
-		KeyType: "ssh-ed25519",
-		Key:     publicKey,
-	}
-	keyData.PubKey = ssh.Marshal(pubKeyData)
-
-	// Private key block
-	privKeyData := struct {
-		Check1  uint64
-		Check2  uint64
+	privKeyStruct := struct {
+		Check1  uint32
+		Check2  uint32
 		KeyType string
 		PubKey  []byte
 		PrivKey []byte
 		Comment string
-		Pad     []byte `ssh:"rest"`
 	}{
-		Check1:  0, // checkint1
-		Check2:  0, // checkint2 (same as checkint1)
-		KeyType: "ssh-ed25519",
+		Check1:  checkValue,
+		Check2:  checkValue,
+		KeyType: ssh.KeyAlgoED25519,
 		PubKey:  publicKey,
-		PrivKey: append(seed, publicKey...), // seed + public key
+		PrivKey: append(seed, publicKey...),
 		Comment: comment,
 	}
 
-	// Marshal the private key data
-	keyData.PrivKeyBlock = ssh.Marshal(privKeyData)
+	privKeyBlock := ssh.Marshal(privKeyStruct)
+	blockSize := 8
+	if passphrase != "" {
+		blockSize = aes.BlockSize
+	}
+	privKeyBlock = generateOpenSSHPadding(privKeyBlock, blockSize)
 
-	// Add padding to make the private key length a multiple of the cipher block size (8 bytes)
-	if pad := len(keyData.PrivKeyBlock) % 8; pad != 0 {
-		padding := make([]byte, 8-pad)
-		for i := range padding {
-			padding[i] = byte(i + 1)
+	pubKeyData := struct {
+		KeyType string
+		Key     []byte
+	}{
+		KeyType: ssh.KeyAlgoED25519,
+		Key:     publicKey,
+	}
+	pubKeyBlock := ssh.Marshal(pubKeyData)
+
+	cipherName := "none"
+	kdfName := "none"
+	var kdfOpts []byte
+	if passphrase != "" {
+		encrypted, cipher, kdf, opts, err := encryptOpenSSHPrivateKey(privKeyBlock, passphrase)
+		if err != nil {
+			return nil, err
 		}
-		keyData.PrivKeyBlock = append(keyData.PrivKeyBlock, padding...)
+		privKeyBlock = encrypted
+		cipherName = cipher
+		kdfName = kdf
+		kdfOpts = opts
 	}
 
-	// Create the OpenSSH private key format
-	magic := append([]byte("openssh-key-v1\x00"), 0)
-	data := ssh.Marshal(keyData)
+	keyData := struct {
+		CipherName   string
+		KdfName      string
+		KdfOpts      []byte `ssh:"string"`
+		NumKeys      uint32
+		PubKey       []byte `ssh:"string"`
+		PrivKeyBlock []byte `ssh:"string"`
+	}{
+		CipherName:   cipherName,
+		KdfName:      kdfName,
+		KdfOpts:      kdfOpts,
+		NumKeys:      1,
+		PubKey:       pubKeyBlock,
+		PrivKeyBlock: privKeyBlock,
+	}
 
-	// Create the PEM block
+	encoded := append([]byte(openSSHKeyV1Magic), ssh.Marshal(keyData)...)
 	pemBlock := &pem.Block{
 		Type:  "OPENSSH PRIVATE KEY",
-		Bytes: append(magic, data...),
+		Bytes: encoded,
 	}
 
-	return pem.EncodeToMemory(pemBlock)
+	return pem.EncodeToMemory(pemBlock), nil
+}
+
+func generateOpenSSHPadding(block []byte, blockSize int) []byte {
+	if blockSize <= 0 {
+		return block
+	}
+
+	for i, l := 0, len(block); (l+i)%blockSize != 0; i++ {
+		block = append(block, byte(i+1))
+	}
+
+	return block
+}
+
+func encryptOpenSSHPrivateKey(privKeyBlock []byte, passphrase string) ([]byte, string, string, []byte, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, "", "", nil, fmt.Errorf("failed to generate salt: %w", err)
+	}
+
+	const rounds = 16
+	key, err := bcryptPBKDF([]byte(passphrase), salt, rounds, 32+aes.BlockSize)
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("failed to derive encryption key: %w", err)
+	}
+
+	dst := make([]byte, len(privKeyBlock))
+	cipherBlock, err := aes.NewCipher(key[:32])
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	stream := cipher.NewCTR(cipherBlock, key[32:])
+	stream.XORKeyStream(dst, privKeyBlock)
+
+	kdfOpts := ssh.Marshal(&struct {
+		Salt   []byte
+		Rounds uint32
+	}{Salt: salt, Rounds: rounds})
+
+	return dst, "aes256-ctr", "bcrypt", kdfOpts, nil
 }
 
 // ValidatePrivateKey attempts to parse the private key to ensure it's in a valid format
@@ -137,37 +190,39 @@ func ValidatePrivateKey(keyData []byte) error {
 	}
 }
 
-// CreateSSHKey creates a new SSH key pair for the given account
-func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) error {
+// CreateSSHKey creates a new SSH key pair for the given account.
+// When keyFileOverride is nil or empty, the key is written to the default
+// location of ~/.ssh/id_<type>_<account>.
+func CreateSSHKey(accountName, accountEmail, passphrase string, keyType KeyType, keyFileOverride *string) error {
 	if keyType == "" {
 		keyType = KeyTypeED25519 // Default to ED25519
 	}
 
-	// If keyFile is not provided, use default location in .ssh directory
-	if keyFile == "" {
+	var keyFile string
+	if keyFileOverride != nil && *keyFileOverride != "" {
+		keyFile = *keyFileOverride
+		parentDir := filepath.Dir(keyFile)
+		if err := os.MkdirAll(parentDir, 0700); err != nil {
+			return fmt.Errorf("failed to create directory for key file: %w", err)
+		}
+	} else {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return fmt.Errorf("failed to get home directory: %w", err)
 		}
 
-		// Create .ssh directory if it doesn't exist
 		sshDir := filepath.Join(homeDir, ".ssh")
 		if err := os.MkdirAll(sshDir, 0700); err != nil {
 			return fmt.Errorf("failed to create .ssh directory: %w", err)
 		}
 
-		// Generate default key file path based on key type
 		switch keyType {
 		case KeyTypeRSA:
 			keyFile = filepath.Join(sshDir, fmt.Sprintf("id_rsa_%s", accountName))
 		case KeyTypeED25519:
 			keyFile = filepath.Join(sshDir, fmt.Sprintf("id_ed25519_%s", accountName))
-		}
-	} else {
-		// Ensure parent directory exists
-		parentDir := filepath.Dir(keyFile)
-		if err := os.MkdirAll(parentDir, 0700); err != nil {
-			return fmt.Errorf("failed to create directory for key file: %w", err)
+		default:
+			return fmt.Errorf("unsupported key type: %s", keyType)
 		}
 	}
 
@@ -183,9 +238,19 @@ func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) er
 		}
 
 		// Create private key in PKCS#1 format
-		privateKeyPEM := &pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+		var privateKeyPEM *pem.Block
+		if passphrase != "" {
+			encryptedBlock, err := x509.EncryptPEMBlock(rand.Reader, "RSA PRIVATE KEY", privateKeyBytes, []byte(passphrase), x509.PEMCipherAES256)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt RSA private key: %w", err)
+			}
+			privateKeyPEM = encryptedBlock
+		} else {
+			privateKeyPEM = &pem.Block{
+				Type:  "RSA PRIVATE KEY",
+				Bytes: privateKeyBytes,
+			}
 		}
 
 		// Write private key to file
@@ -213,7 +278,10 @@ func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) er
 		}
 
 		// Marshal private key in OpenSSH format
-		privateKeyBytes := MarshalED25519PrivateKey(privKey, comment)
+		privateKeyBytes, err := MarshalED25519PrivateKey(privKey, comment, passphrase)
+		if err != nil {
+			return fmt.Errorf("failed to marshal ED25519 private key: %w", err)
+		}
 
 		// Validate the private key
 		if err := ValidatePrivateKey(privateKeyBytes); err != nil {

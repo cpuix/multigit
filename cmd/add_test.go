@@ -19,8 +19,8 @@ type MockSSH struct {
 }
 
 // CreateSSHKey mocks the CreateSSHKey function
-func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType ssh.KeyType) error {
-	args := m.Called(accountName, email, passphrase, keyType)
+func (m *MockSSH) CreateSSHKey(accountName, email, passphrase string, keyType ssh.KeyType, keyFileOverride *string) error {
+	args := m.Called(accountName, email, passphrase, keyType, keyFileOverride)
 	return args.Error(0)
 }
 
@@ -92,7 +92,7 @@ func TestCreateAccount(t *testing.T) {
 			passphrase:  "",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "new-account", "new@example.com", "", ssh.KeyTypeED25519).Return(nil)
+				m.On("CreateSSHKey", "new-account", "new@example.com", "", ssh.KeyTypeED25519, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", "new-account").Return(nil)
 				m.On("AddSSHConfigEntry", "new-account").Return(nil)
 			},
@@ -106,7 +106,7 @@ func TestCreateAccount(t *testing.T) {
 			passphrase:  "my-secure-passphrase",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "secure-account", "secure@example.com", "my-secure-passphrase", ssh.KeyTypeED25519).Return(nil)
+				m.On("CreateSSHKey", "secure-account", "secure@example.com", "my-secure-passphrase", ssh.KeyTypeED25519, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", "secure-account").Return(nil)
 				m.On("AddSSHConfigEntry", "secure-account").Return(nil)
 			},
@@ -139,7 +139,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "fail-key@example.com",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "fail-key-account", "fail-key@example.com", "", ssh.KeyTypeED25519).
+				m.On("CreateSSHKey", "fail-key-account", "fail-key@example.com", "", ssh.KeyTypeED25519, (*string)(nil)).
 					Return(fmt.Errorf("ssh key creation failed"))
 			},
 			expectError: true,
@@ -152,7 +152,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "fail-agent@example.com",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "fail-agent-account", "fail-agent@example.com", "", ssh.KeyTypeED25519).Return(nil)
+				m.On("CreateSSHKey", "fail-agent-account", "fail-agent@example.com", "", ssh.KeyTypeED25519, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", "fail-agent-account").
 					Return(fmt.Errorf("failed to add to agent"))
 			},
@@ -166,7 +166,7 @@ func TestCreateAccount(t *testing.T) {
 			email:       "fail-config@example.com",
 			setup:       func() {},
 			mockSetup: func(m *MockSSH) {
-				m.On("CreateSSHKey", "fail-config-account", "fail-config@example.com", "", ssh.KeyTypeED25519).Return(nil)
+				m.On("CreateSSHKey", "fail-config-account", "fail-config@example.com", "", ssh.KeyTypeED25519, (*string)(nil)).Return(nil)
 				m.On("AddSSHKeyToAgent", "fail-config-account").Return(nil)
 				m.On("AddSSHConfigEntry", "fail-config-account").
 					Return(fmt.Errorf("failed to add config entry"))
