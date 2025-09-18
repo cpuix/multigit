@@ -51,7 +51,7 @@ func TestDeleteCommand(t *testing.T) {
 			setup: func() {
 				// Initialize config
 				cmd.InitConfig()
-				
+
 				// Create a config with a test account
 				config := multigit.NewConfig()
 				config.Accounts = map[string]multigit.Account{
@@ -72,7 +72,7 @@ func TestDeleteCommand(t *testing.T) {
 			setup: func() {
 				// Initialize config
 				cmd.InitConfig()
-				
+
 				// Create an empty config
 				config := multigit.NewConfig()
 				err := multigit.SaveConfigToFile(config, configPath)
@@ -141,4 +141,70 @@ func TestDeleteCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeleteCommandForceSkipsPrompt(t *testing.T) {
+	tempDir := t.TempDir()
+	configDir := filepath.Join(tempDir, ".config", "multigit")
+	err := os.MkdirAll(configDir, 0755)
+	require.NoError(t, err, "Failed to create config directory")
+	configPath := filepath.Join(configDir, "config.json")
+
+	config := multigit.NewConfig()
+	config.Accounts["test-account"] = multigit.Account{
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+	err = multigit.SaveConfigToFile(config, configPath)
+	require.NoError(t, err, "Failed to save config")
+
+	oldCfgFile := cmd.CfgFile
+	oldHome := os.Getenv("HOME")
+	require.NoError(t, os.Setenv("HOME", tempDir))
+	cmd.CfgFile = configPath
+	t.Cleanup(func() {
+		os.Setenv("HOME", oldHome)
+		cmd.CfgFile = oldCfgFile
+	})
+
+	mockSSH := new(MockSSH)
+	mockSSH.On("DeleteSSHKey", "test-account").Return(nil)
+	mockSSH.On("RemoveSSHConfigEntry", "test-account").Return(nil)
+
+	oldSSHClient := multigit.SSHClient
+	multigit.SSHClient = mockSSH
+	t.Cleanup(func() { multigit.SSHClient = oldSSHClient })
+
+	oldStdout := os.Stdout
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = stdoutWriter
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	oldStdin := os.Stdin
+	stdinReader, stdinWriter, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdin = stdinReader
+	t.Cleanup(func() { os.Stdin = oldStdin })
+	stdinWriter.Close()
+
+	cmd.RootCmd.SetArgs([]string{"delete", "test-account", "--force"})
+	err = cmd.RootCmd.Execute()
+	require.NoError(t, err, "Delete command with --force should not error")
+
+	stdoutWriter.Close()
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, stdoutReader)
+	require.NoError(t, err)
+	output := buf.String()
+
+	assert.NotContains(t, output, "Are you sure you want to continue?", "force flag should skip confirmation prompt")
+	assert.NotContains(t, output, "WARNING", "force flag should suppress confirmation warning")
+	assert.Contains(t, output, "has been deleted successfully", "command should report successful deletion")
+
+	updatedConfig := multigit.LoadConfig()
+	_, exists := updatedConfig.Accounts["test-account"]
+	assert.False(t, exists, "Account should be deleted from config")
+
+	mockSSH.AssertExpectations(t)
 }
