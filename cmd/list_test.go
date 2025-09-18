@@ -88,6 +88,14 @@ func TestListCommand(t *testing.T) {
 		err := multigit.SaveConfigToFile(config, configPath)
 		require.NoError(t, err, "Failed to save config")
 
+		// Create an ED25519 SSH key for the active account
+		sshDir := filepath.Join(tempDir, ".ssh")
+		err = os.MkdirAll(sshDir, 0700)
+		require.NoError(t, err, "Failed to create SSH directory")
+		edKeyPath := filepath.Join(sshDir, "id_ed25519_test-account")
+		err = os.WriteFile(edKeyPath, []byte("dummy key"), 0600)
+		require.NoError(t, err, "Failed to create ED25519 SSH key")
+
 		// Initialize config
 		cmd.InitConfig()
 
@@ -108,5 +116,9 @@ func TestListCommand(t *testing.T) {
 		assert.Contains(t, output, "test@example.com", "Output should contain the test account email")
 		assert.Contains(t, output, "another@example.com", "Output should contain the another account email")
 		assert.Contains(t, output, "Active account", "Output should indicate which account is active")
+		assert.Contains(t, output, edKeyPath, "Output should display the ED25519 SSH key path for the active account")
+		missingKeyPath := filepath.Join(sshDir, "id_ed25519_another-account")
+		assert.Contains(t, output, missingKeyPath, "Output should mention the ED25519 path checked for the other account")
+		assert.Contains(t, output, "not found", "Output should indicate when an SSH key is missing")
 	})
 }
