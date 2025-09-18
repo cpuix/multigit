@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/cpuix/multigit/internal/multigit"
 	"github.com/fatih/color"
@@ -27,12 +26,16 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("  Email: %s\n", color.CyanString(account.Email))
 
 		// Check if SSH key exists
-		homeDir, _ := os.UserHomeDir()
-		keyPath := fmt.Sprintf("%s/.ssh/id_rsa_%s", homeDir, activeAccountName)
-		if _, err := os.Stat(keyPath); err == nil {
+		keyPath, candidates, err := findSSHKeyPath(activeAccountName)
+		switch {
+		case err != nil:
+			fmt.Printf("  SSH Key: %s\n", color.YellowString(fmt.Sprintf("error checking SSH key: %v", err)))
+		case keyPath != "":
 			fmt.Printf("  SSH Key: %s\n", keyPath)
-		} else {
-			fmt.Printf("  SSH Key: %s\n", color.YellowString(keyPath+" (not found)"))
+		case len(candidates) > 0:
+			fmt.Printf("  SSH Key: %s\n", color.YellowString(fmt.Sprintf("%s (not found)", candidates[0])))
+		default:
+			fmt.Printf("  SSH Key: %s\n", color.YellowString("(not found)"))
 		}
 
 		return nil
