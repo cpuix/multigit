@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/cpuix/multigit/internal/multigit"
 	"github.com/cpuix/multigit/internal/ssh"
@@ -50,7 +51,7 @@ This will:
 		}
 
 		// Set git config
-		if err := setGitConfig(account, useLocal); err != nil {
+		if err := setGitConfig(accountName, account, useLocal); err != nil {
 			return fmt.Errorf("failed to set git config: %w", err)
 		}
 
@@ -66,7 +67,7 @@ This will:
 }
 
 // setGitConfig sets the git user name and email (global or local)
-func setGitConfig(account multigit.Account, local bool) error {
+func setGitConfig(accountName string, account multigit.Account, local bool) error {
 	// Prepare git config args
 	configArgs := []string{"config"}
 	if !local {
@@ -90,17 +91,47 @@ func setGitConfig(account multigit.Account, local bool) error {
 	}
 
 	// Set push default to current
-	if err := RunGitCommand("config", "--global", "push.default", "current"); err != nil {
+	if err := RunGitCommand(append(configArgs, "push.default", "current")...); err != nil {
 		return fmt.Errorf("failed to set git push.default: %w", err)
 	}
 
+	// Resolve the SSH key path, preferring ED25519
+	keyPath, err := resolveSSHKeyPath(accountName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve SSH key path: %w", err)
+	}
+
 	// Set github.com to use the correct SSH key
-	sshCommand := fmt.Sprintf("ssh -i ~/.ssh/id_rsa_%s -F /dev/null", account.Name)
-	if err := RunGitCommand("config", "--global", "core.sshCommand", sshCommand); err != nil {
+	sshCommand := fmt.Sprintf("ssh -i %s -F /dev/null", keyPath)
+	if err := RunGitCommand(append(configArgs, "core.sshCommand", sshCommand)...); err != nil {
 		return fmt.Errorf("failed to set git core.sshCommand: %w", err)
 	}
 
 	return nil
+}
+
+func resolveSSHKeyPath(accountName string) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine home directory: %w", err)
+	}
+
+	sshDir := filepath.Join(homeDir, ".ssh")
+	keyCandidates := []string{
+		filepath.Join(sshDir, fmt.Sprintf("id_ed25519_%s", accountName)),
+		filepath.Join(sshDir, fmt.Sprintf("id_rsa_%s", accountName)),
+	}
+
+	for _, keyPath := range keyCandidates {
+		if _, err := os.Stat(keyPath); err == nil {
+			return keyPath, nil
+		} else if err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("failed to access SSH key %s: %w", keyPath, err)
+		}
+	}
+
+	// Default to the preferred ED25519 path if no key was found
+	return keyCandidates[0], nil
 }
 
 // RunGitCommand is a variable that holds the function to run git commands

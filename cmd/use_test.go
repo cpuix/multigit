@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,14 +15,15 @@ import (
 
 // testUseCommand is a test helper that sets up the test environment for the use command
 type testUseCommand struct {
-	gitCommands []string
+	gitCommands [][]string
 	isGitRepo   bool
 	t           *testing.T
 }
 
 // mockRunGitCommand mocks the RunGitCommand function for testing
 func (tuc *testUseCommand) mockRunGitCommand(args ...string) error {
-	tuc.gitCommands = append(tuc.gitCommands, args[0])
+	copied := append([]string(nil), args...)
+	tuc.gitCommands = append(tuc.gitCommands, copied)
 	tuc.t.Logf("git command: %v", args)
 	return nil
 }
@@ -35,8 +37,6 @@ func (tuc *testUseCommand) mockIsGitRepo() bool {
 // save original functions for restoration
 var originalRunGitCommand = cmd.RunGitCommand
 var originalIsGitRepo = cmd.IsGitRepo
-
-
 
 // TestUseCommand tests the use command
 func TestUseCommand(t *testing.T) {
@@ -78,7 +78,7 @@ func TestUseCommand(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sshDir, 0700))
 
 	// Create a test SSH key
-	testSSHKeyPath := filepath.Join(sshDir, "id_rsa_test-account")
+	testSSHKeyPath := filepath.Join(sshDir, "id_ed25519_test-account")
 	require.NoError(t, os.WriteFile(testSSHKeyPath, []byte("dummy key"), 0600))
 
 	// Initialize a new config
@@ -109,13 +109,13 @@ func TestUseCommand(t *testing.T) {
 
 	// Test cases
 	tests := []struct {
-		name        string
-		args        []string
-		setup       func()
-		local       bool
-		expectCmds  int
-		expectError bool
-		errMsg      string
+		name         string
+		args         []string
+		setup        func()
+		local        bool
+		expectedCmds [][]string
+		expectError  bool
+		errMsg       string
 	}{
 		{
 			name: "Switch to existing account",
@@ -129,8 +129,14 @@ func TestUseCommand(t *testing.T) {
 				}
 				require.NoError(t, multigit.SaveConfig(config))
 			},
-			local:       false,
-			expectCmds:  5, // Expect 5 git config commands for global config
+			local: false,
+			expectedCmds: [][]string{
+				{"config", "--global", "user.name", "Test User"},
+				{"config", "--global", "user.email", "test@example.com"},
+				{"config", "--global", "url.ssh://git@github.com/.insteadOf", "https://github.com/"},
+				{"config", "--global", "push.default", "current"},
+				{"config", "--global", "core.sshCommand", fmt.Sprintf("ssh -i %s -F /dev/null", filepath.Join(tempDir, ".ssh", "id_ed25519_test-account"))},
+			},
 			expectError: false,
 		},
 		{
@@ -145,8 +151,13 @@ func TestUseCommand(t *testing.T) {
 				}
 				require.NoError(t, multigit.SaveConfig(config))
 			},
-			local:       true,
-			expectCmds:  4, // Expect 4 git config commands for local config
+			local: true,
+			expectedCmds: [][]string{
+				{"config", "user.name", "Test User"},
+				{"config", "user.email", "test@example.com"},
+				{"config", "push.default", "current"},
+				{"config", "core.sshCommand", fmt.Sprintf("ssh -i %s -F /dev/null", filepath.Join(tempDir, ".ssh", "id_ed25519_test-account"))},
+			},
 			expectError: false,
 		},
 		{
@@ -158,10 +169,10 @@ func TestUseCommand(t *testing.T) {
 				delete(config.Accounts, "nonexistent")
 				require.NoError(t, multigit.SaveConfig(config))
 			},
-			local:       false,
-			expectCmds:  0, // Expect no git commands
-			expectError: true,
-			errMsg:      "account 'nonexistent' does not exist",
+			local:        false,
+			expectedCmds: nil,
+			expectError:  true,
+			errMsg:       "account 'nonexistent' does not exist",
 		},
 	}
 
@@ -196,15 +207,9 @@ func TestUseCommand(t *testing.T) {
 
 			// Verify the correct git commands were called
 			if !tt.expectError {
-				// Verify that git config was called with the correct arguments
-				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
-				// Verify all commands are 'config' commands
-				for _, cmd := range tuc.gitCommands {
-					assert.Equal(t, "config", cmd, "Expected 'config' command, got %s", cmd)
-				}
+				assert.Equal(t, tt.expectedCmds, tuc.gitCommands, "Unexpected git commands executed")
 			} else {
-				// Verify no git commands were called
-				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
+				assert.Len(t, tuc.gitCommands, 0, "No git commands should be executed when an error occurs")
 			}
 
 			// Verify results
