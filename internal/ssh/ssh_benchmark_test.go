@@ -19,7 +19,7 @@ func BenchmarkCreateSSHKey(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		keyFile := filepath.Join(tempDir, "test_key")
-		err := ssh.CreateSSHKey("benchmark", "benchmark@example.com", keyFile, ssh.KeyTypeRSA)
+		err := ssh.CreateSSHKey("benchmark", "benchmark@example.com", "", ssh.KeyTypeRSA, keyFile)
 		if err != nil {
 			b.Fatalf("Failed to create SSH key: %v", err)
 		}
@@ -34,7 +34,7 @@ func BenchmarkAddSSHKeyToAgent(b *testing.B) {
 	defer os.RemoveAll(tempDir)
 
 	keyFile := filepath.Join(tempDir, "test_key")
-	err = ssh.CreateSSHKey("benchmark", "benchmark@example.com", keyFile, ssh.KeyTypeRSA)
+	err = ssh.CreateSSHKey("benchmark", "benchmark@example.com", "", ssh.KeyTypeRSA, keyFile)
 	if err != nil {
 		b.Fatalf("Failed to create SSH key: %v", err)
 	}

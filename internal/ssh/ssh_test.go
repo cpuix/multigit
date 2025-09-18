@@ -3,6 +3,8 @@ package ssh_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +15,7 @@ import (
 	"github.com/cpuix/multigit/internal/ssh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	xssh "golang.org/x/crypto/ssh"
 )
 
 // Test için gerekli wrapper fonksiyonlar
@@ -81,7 +84,7 @@ func TestCreateAndDeleteSSHKey(t *testing.T) {
 
 	// Test key creation
 	t.Run("CreateSSHKey", func(t *testing.T) {
-		err := ssh.CreateSSHKey(accountName, accountEmail, keyFile, ssh.KeyTypeED25519)
+		err := ssh.CreateSSHKey(accountName, accountEmail, "", ssh.KeyTypeED25519, keyFile)
 		require.NoError(t, err, "Failed to create SSH key")
 
 		// Check if key files were created (ED25519 keys)
@@ -179,7 +182,7 @@ func TestCreateSSHKey(t *testing.T) {
 			os.Setenv("HOME", tempDir)
 			defer os.Setenv("HOME", oldHome)
 
-			err := ssh.CreateSSHKey("test-account", "test@example.com", keyFile, ssh.KeyType(tt.keyType))
+			err := ssh.CreateSSHKey("test-account", "test@example.com", "", ssh.KeyType(tt.keyType), keyFile)
 
 			if tt.expectError {
 				require.Error(t, err, "Expected error but got none")
@@ -213,6 +216,68 @@ func TestCreateSSHKey(t *testing.T) {
 	}
 }
 
+func TestCreateSSHKeyWithPassphrase(t *testing.T) {
+	tempDir := t.TempDir()
+
+	sshDir := filepath.Join(tempDir, ".ssh")
+	require.NoError(t, os.MkdirAll(sshDir, 0700), "Failed to create .ssh directory")
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	tests := []struct {
+		name       string
+		keyType    ssh.KeyType
+		passphrase string
+	}{
+		{
+			name:       "RSA",
+			keyType:    ssh.KeyTypeRSA,
+			passphrase: "rsa-passphrase",
+		},
+		{
+			name:       "ED25519",
+			keyType:    ssh.KeyTypeED25519,
+			passphrase: "ed25519-passphrase",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			accountName := fmt.Sprintf("pass-%s-account", string(tt.keyType))
+			keyFile := filepath.Join(sshDir, fmt.Sprintf("id_%s_with_pass", string(tt.keyType)))
+
+			err := ssh.CreateSSHKey(accountName, "pass@example.com", tt.passphrase, tt.keyType, keyFile)
+			require.NoError(t, err, "Failed to create SSH key with passphrase")
+
+			privateKeyBytes, err := os.ReadFile(keyFile)
+			require.NoError(t, err, "Failed to read private key")
+
+			block, _ := pem.Decode(privateKeyBytes)
+			require.NotNil(t, block, "Private key should be PEM encoded")
+			require.Equal(t, "4,ENCRYPTED", block.Headers["Proc-Type"], "Private key should be encrypted")
+
+			if tt.keyType == ssh.KeyTypeRSA {
+				_, err = xssh.ParseRawPrivateKey(privateKeyBytes)
+				require.Error(t, err, "Encrypted private key should not parse without passphrase")
+
+				_, err = xssh.ParseRawPrivateKeyWithPassphrase(privateKeyBytes, []byte(tt.passphrase))
+				require.NoError(t, err, "Encrypted private key should parse with passphrase")
+			} else {
+				decrypted, err := x509.DecryptPEMBlock(block, []byte(tt.passphrase))
+				require.NoError(t, err, "Failed to decrypt ED25519 private key")
+
+				parsedKey, err := x509.ParsePKCS8PrivateKey(decrypted)
+				require.NoError(t, err, "Failed to parse decrypted ED25519 private key")
+				_, ok := parsedKey.(ed25519.PrivateKey)
+				require.True(t, ok, "Expected ED25519 private key type after decryption")
+			}
+		})
+	}
+}
+
 func TestDeleteSSHKey(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -226,7 +291,7 @@ func TestDeleteSSHKey(t *testing.T) {
 			name: "Delete existing RSA key by account name",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
 				keyFile := filepath.Join(tempDir, "id_rsa_test-account")
-				err := ssh.CreateSSHKey("test-account", "test@example.com", keyFile, ssh.KeyTypeRSA)
+				err := ssh.CreateSSHKey("test-account", "test@example.com", "", ssh.KeyTypeRSA, keyFile)
 				require.NoError(t, err, "Failed to create test key")
 				return "test-account", []string{
 					keyFile,
@@ -241,7 +306,7 @@ func TestDeleteSSHKey(t *testing.T) {
 			name: "Delete existing ED25519 key by account name",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
 				keyFile := filepath.Join(tempDir, "id_ed25519_test-account-ed25519")
-				err := ssh.CreateSSHKey("test-account-ed25519", "test@example.com", keyFile, ssh.KeyTypeED25519)
+				err := ssh.CreateSSHKey("test-account-ed25519", "test@example.com", "", ssh.KeyTypeED25519, keyFile)
 				require.NoError(t, err, "Failed to create test key")
 				return "test-account-ed25519", []string{
 					keyFile,
@@ -264,7 +329,7 @@ func TestDeleteSSHKey(t *testing.T) {
 			name: "Delete existing key by file path",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
 				keyFile := filepath.Join(tempDir, "id_rsa_test_file")
-				err := ssh.CreateSSHKey("test-account-file", "test@example.com", keyFile, ssh.KeyTypeRSA)
+				err := ssh.CreateSSHKey("test-account-file", "test@example.com", "", ssh.KeyTypeRSA, keyFile)
 				require.NoError(t, err, "Failed to create test key")
 				return keyFile, []string{
 					keyFile,
@@ -293,10 +358,10 @@ func TestDeleteSSHKey(t *testing.T) {
 				rsaKeyFile := filepath.Join(tempDir, "id_rsa_multi-account")
 				ed25519KeyFile := filepath.Join(tempDir, "id_ed25519_multi-account")
 
-				err := ssh.CreateSSHKey("multi-account", "test@example.com", rsaKeyFile, ssh.KeyTypeRSA)
+				err := ssh.CreateSSHKey("multi-account", "test@example.com", "", ssh.KeyTypeRSA, rsaKeyFile)
 				require.NoError(t, err, "Failed to create RSA test key")
 
-				err = ssh.CreateSSHKey("multi-account", "test@example.com", ed25519KeyFile, ssh.KeyTypeED25519)
+				err = ssh.CreateSSHKey("multi-account", "test@example.com", "", ssh.KeyTypeED25519, ed25519KeyFile)
 				require.NoError(t, err, "Failed to create ED25519 test key")
 
 				return "multi-account", []string{
@@ -313,8 +378,12 @@ func TestDeleteSSHKey(t *testing.T) {
 		{
 			name: "Fail when cannot delete private key",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
+				if isRootUser() {
+					t.Skip("skipping permission test when running as root user")
+				}
+
 				keyFile := filepath.Join(tempDir, "id_rsa_protected")
-				err := ssh.CreateSSHKey("protected-account", "test@example.com", keyFile, ssh.KeyTypeRSA)
+				err := ssh.CreateSSHKey("protected-account", "test@example.com", "", ssh.KeyTypeRSA, keyFile)
 				require.NoError(t, err, "Failed to create test key")
 
 				// Make the directory read-only to prevent file deletion
@@ -613,7 +682,7 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 			name: "Delete existing key file",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
 				keyFile := filepath.Join(tempDir, "id_rsa_test")
-				err := ssh.CreateSSHKey("test-account", "test@example.com", keyFile, ssh.KeyTypeRSA)
+				err := ssh.CreateSSHKey("test-account", "test@example.com", "", ssh.KeyTypeRSA, keyFile)
 				require.NoError(t, err, "Failed to create test key")
 				return keyFile, []string{
 					keyFile,
@@ -641,11 +710,11 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				// Create only a public key file
 				keyFile := filepath.Join(tempDir, "id_rsa_public_only")
 				pubKeyFile := keyFile + ".pub"
-				
+
 				// Create a dummy public key file
 				err := os.WriteFile(pubKeyFile, []byte("ssh-rsa AAAAB3NzaC1yc2E test@example.com"), 0644)
 				require.NoError(t, err, "Failed to create test public key")
-				
+
 				return keyFile, []string{
 					pubKeyFile,
 				}
@@ -656,20 +725,24 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 		{
 			name: "Error checking private key file",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
+				if isRootUser() {
+					t.Skip("skipping permission test when running as root user")
+				}
+
 				// Create a directory with the same name as the key file to cause a stat error
 				keyDir := filepath.Join(tempDir, "key_dir")
 				err := os.MkdirAll(keyDir, 0700)
 				require.NoError(t, err, "Failed to create directory")
-				
+
 				// Make it inaccessible to cause a stat error
 				err = os.Chmod(keyDir, 0000) // No permissions
 				require.NoError(t, err, "Failed to set directory permissions")
-				
+
 				t.Cleanup(func() {
 					// Restore permissions for cleanup
 					os.Chmod(keyDir, 0700)
 				})
-				
+
 				keyFile := filepath.Join(keyDir, "id_rsa")
 				return keyFile, []string{}
 			},
@@ -683,18 +756,18 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 				keyFile := filepath.Join(tempDir, "id_rsa_error")
 				err := os.WriteFile(keyFile, []byte("dummy private key"), 0600)
 				require.NoError(t, err, "Failed to create test key")
-				
+
 				// Create a directory with the same name as the public key file
 				pubKeyDir := keyFile + ".pub"
 				err = os.MkdirAll(pubKeyDir, 0700)
 				require.NoError(t, err, "Failed to create directory")
-				
+
 				// Create a file inside the directory to ensure os.Remove fails
 				// (can't remove non-empty directory)
 				dummyFile := filepath.Join(pubKeyDir, "dummy")
 				err = os.WriteFile(dummyFile, []byte("dummy"), 0600)
 				require.NoError(t, err, "Failed to create dummy file")
-				
+
 				return keyFile, []string{
 					keyFile,
 					pubKeyDir,
@@ -706,8 +779,12 @@ func TestDeleteSSHKeyFile(t *testing.T) {
 		{
 			name: "Fail when cannot delete private key",
 			setup: func(t *testing.T, tempDir string) (string, []string) {
+				if isRootUser() {
+					t.Skip("skipping permission test when running as root user")
+				}
+
 				keyFile := filepath.Join(tempDir, "id_rsa_protected")
-				err := ssh.CreateSSHKey("protected-account", "test@example.com", keyFile, ssh.KeyTypeRSA)
+				err := ssh.CreateSSHKey("protected-account", "test@example.com", "", ssh.KeyTypeRSA, keyFile)
 				require.NoError(t, err, "Failed to create test key")
 
 				// Make the directory read-only to prevent file deletion
@@ -943,7 +1020,7 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Reset SSH_AUTH_SOCK to default for each test case
 			os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
-			
+
 			// Setup test case
 			tc.setup()
 

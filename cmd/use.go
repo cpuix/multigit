@@ -12,7 +12,7 @@ import (
 
 // SSHCreateFunc is a function type for creating SSH keys
 var SSHCreateFunc = func(accountName, email, passphrase string, keyType ssh.KeyType) error {
-	return ssh.CreateSSHKey(accountName, email, passphrase, keyType)
+	return ssh.CreateSSHKey(accountName, email, passphrase, keyType, "")
 }
 
 // SSHAddToAgentFunc is a function type for adding SSH keys to the agent

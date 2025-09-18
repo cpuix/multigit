@@ -137,11 +137,17 @@ func ValidatePrivateKey(keyData []byte) error {
 	}
 }
 
-// CreateSSHKey creates a new SSH key pair for the given account
-func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) error {
+// CreateSSHKey creates a new SSH key pair for the given account.
+// If passphrase is provided the private key will be encrypted and the
+// resulting key file will require the passphrase for use. keyPathOverride
+// can be used to specify a custom output path for the private key; when
+// left empty the default ~/.ssh path is used based on the key type.
+func CreateSSHKey(accountName, accountEmail, passphrase string, keyType KeyType, keyPathOverride string) error {
 	if keyType == "" {
 		keyType = KeyTypeED25519 // Default to ED25519
 	}
+
+	keyFile := keyPathOverride
 
 	// If keyFile is not provided, use default location in .ssh directory
 	if keyFile == "" {
@@ -188,6 +194,14 @@ func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) er
 			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 		}
 
+		if passphrase != "" {
+			encryptedBlock, err := x509.EncryptPEMBlock(rand.Reader, privateKeyPEM.Type, privateKeyPEM.Bytes, []byte(passphrase), x509.PEMCipherAES256)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt private key: %w", err)
+			}
+			privateKeyPEM = encryptedBlock
+		}
+
 		// Write private key to file
 		if err := os.WriteFile(keyFile, pem.EncodeToMemory(privateKeyPEM), 0600); err != nil {
 			return fmt.Errorf("failed to write private key: %w", err)
@@ -212,8 +226,20 @@ func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) er
 			return fmt.Errorf("failed to generate ED25519 key pair: %w", err)
 		}
 
-		// Marshal private key in OpenSSH format
-		privateKeyBytes := MarshalED25519PrivateKey(privKey, comment)
+		var privateKeyBytes []byte
+		if passphrase != "" {
+			pkcs8Bytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+			if err != nil {
+				return fmt.Errorf("failed to marshal ED25519 private key: %w", err)
+			}
+			encryptedBlock, err := x509.EncryptPEMBlock(rand.Reader, "PRIVATE KEY", pkcs8Bytes, []byte(passphrase), x509.PEMCipherAES256)
+			if err != nil {
+				return fmt.Errorf("failed to encrypt private key: %w", err)
+			}
+			privateKeyBytes = pem.EncodeToMemory(encryptedBlock)
+		} else {
+			privateKeyBytes = MarshalED25519PrivateKey(privKey, comment)
+		}
 
 		// Validate the private key
 		if err := ValidatePrivateKey(privateKeyBytes); err != nil {
