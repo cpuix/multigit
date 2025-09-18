@@ -48,11 +48,12 @@ var listCmd = &cobra.Command{
 
 			// Show SSH key info if available
 			homeDir, _ := os.UserHomeDir()
-			keyPath := fmt.Sprintf("%s/.ssh/id_rsa_%s", homeDir, name)
-			if _, err := os.Stat(keyPath); err == nil {
+			keyPath, found, candidates := resolveSSHKeyPath(homeDir, name)
+			if found {
 				fmt.Printf("  SSH Key: %s\n", keyPath)
 			} else {
-				fmt.Printf("  SSH Key: %s (not found)\n", color.YellowString(keyPath))
+				fmt.Printf("  SSH Key: %s (not found)\n",
+					color.YellowString(fmt.Sprintf("%s or %s", candidates[0], candidates[1])))
 			}
 
 			// Show active status
