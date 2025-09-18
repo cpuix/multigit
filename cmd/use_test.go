@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,14 +15,15 @@ import (
 
 // testUseCommand is a test helper that sets up the test environment for the use command
 type testUseCommand struct {
-	gitCommands []string
+	gitCommands [][]string
 	isGitRepo   bool
 	t           *testing.T
 }
 
 // mockRunGitCommand mocks the RunGitCommand function for testing
 func (tuc *testUseCommand) mockRunGitCommand(args ...string) error {
-	tuc.gitCommands = append(tuc.gitCommands, args[0])
+	copiedArgs := append([]string(nil), args...)
+	tuc.gitCommands = append(tuc.gitCommands, copiedArgs)
 	tuc.t.Logf("git command: %v", args)
 	return nil
 }
@@ -32,134 +34,138 @@ func (tuc *testUseCommand) mockIsGitRepo() bool {
 	return tuc.isGitRepo
 }
 
-// save original functions for restoration
-var originalRunGitCommand = cmd.RunGitCommand
-var originalIsGitRepo = cmd.IsGitRepo
-
-
-
 // TestUseCommand tests the use command
 func TestUseCommand(t *testing.T) {
-	// Create test helper
 	tuc := &testUseCommand{
 		t:         t,
-		isGitRepo: true, // Default to true for tests
+		isGitRepo: true,
 	}
 
-	// Save original functions
 	oldRunGitCommand := cmd.RunGitCommand
 	oldIsGitRepo := cmd.IsGitRepo
 
-	// Replace with our mocks
 	cmd.RunGitCommand = tuc.mockRunGitCommand
 	cmd.IsGitRepo = tuc.mockIsGitRepo
 
-	// Restore original functions after test
 	t.Cleanup(func() {
 		cmd.RunGitCommand = oldRunGitCommand
 		cmd.IsGitRepo = oldIsGitRepo
 	})
 
-	// Setup test environment
-	tempDir := t.TempDir()
-	testConfigPath := filepath.Join(tempDir, "config.json")
+	homeDir := t.TempDir()
+	testConfigPath := filepath.Join(homeDir, ".config", "multigit", "config.json")
 
-	// Set up test config
+	require.NoError(t, os.MkdirAll(filepath.Dir(testConfigPath), 0o700))
+
 	os.Setenv("MULTIGIT_CONFIG", testConfigPath)
 	t.Cleanup(func() { os.Unsetenv("MULTIGIT_CONFIG") })
 
-	// Mock home directory
 	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
+	os.Setenv("HOME", homeDir)
 	t.Cleanup(func() { os.Setenv("HOME", oldHome) })
 
-	// Create .ssh directory
-	sshDir := filepath.Join(tempDir, ".ssh")
-	require.NoError(t, os.MkdirAll(sshDir, 0700))
+	sshDir := filepath.Join(homeDir, ".ssh")
+	require.NoError(t, os.MkdirAll(sshDir, 0o700))
 
-	// Create a test SSH key
-	testSSHKeyPath := filepath.Join(sshDir, "id_rsa_test-account")
-	require.NoError(t, os.WriteFile(testSSHKeyPath, []byte("dummy key"), 0600))
+	ed25519KeyPath := filepath.Join(sshDir, "id_ed25519_test-account")
+	rsaKeyPath := filepath.Join(sshDir, "id_rsa_test-account")
 
-	// Initialize a new config
-	config := &multigit.Config{
-		Accounts: make(map[string]multigit.Account),
-	}
-
-	// Create a test account
-	config.Accounts["test-account"] = multigit.Account{
+	baseAccount := multigit.Account{
 		Name:  "Test User",
 		Email: "test@example.com",
 	}
-	config.ActiveAccount = "test-account"
 
-	// Save the config
-	viper.SetConfigFile(testConfigPath)
-	viper.Set("accounts", config.Accounts)
-	viper.Set("active_account", config.ActiveAccount)
-	require.NoError(t, viper.WriteConfig())
+	writeConfig := func(t *testing.T, withAccount bool) {
+		t.Helper()
+		config := multigit.NewConfig()
+		if withAccount {
+			config.Accounts["test-account"] = baseAccount
+			config.ActiveAccount = "test-account"
+		}
+		require.NoError(t, multigit.SaveConfig(config))
+	}
 
-	// Mock SSH functions
+	removeIfExists := func(t *testing.T, path string) {
+		t.Helper()
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			require.NoError(t, err)
+		}
+	}
+
 	oldSSHAddToAgent := cmd.SSHAddToAgentFunc
 	cmd.SSHAddToAgentFunc = func(accountName string) error {
-		// Skip actual SSH agent operations in tests
 		return nil
 	}
 	t.Cleanup(func() { cmd.SSHAddToAgentFunc = oldSSHAddToAgent })
 
-	// Test cases
 	tests := []struct {
-		name        string
-		args        []string
-		setup       func()
-		local       bool
-		expectCmds  int
-		expectError bool
-		errMsg      string
+		name             string
+		args             []string
+		setup            func(t *testing.T)
+		expectedCommands [][]string
+		expectError      bool
+		errMsg           string
 	}{
 		{
-			name: "Switch to existing account",
+			name: "Switch to existing account (global, prefers ed25519)",
 			args: []string{"use", "test-account"},
-			setup: func() {
-				// Ensure the test account exists in the config
-				config := multigit.LoadConfig()
-				config.Accounts["test-account"] = multigit.Account{
-					Name:  "Test User",
-					Email: "test@example.com",
-				}
-				require.NoError(t, multigit.SaveConfig(config))
+			setup: func(t *testing.T) {
+				writeConfig(t, true)
+				removeIfExists(t, ed25519KeyPath)
+				removeIfExists(t, rsaKeyPath)
+				require.NoError(t, os.WriteFile(ed25519KeyPath, []byte("dummy ed key"), 0o600))
+				require.NoError(t, os.WriteFile(rsaKeyPath, []byte("dummy rsa key"), 0o600))
 			},
-			local:       false,
-			expectCmds:  5, // Expect 5 git config commands for global config
-			expectError: false,
+			expectedCommands: [][]string{
+				{"config", "--global", "user.name", baseAccount.Name},
+				{"config", "--global", "user.email", baseAccount.Email},
+				{"config", "--global", "url.ssh://git@github.com/.insteadOf", "https://github.com/"},
+				{"config", "--global", "push.default", "current"},
+				{"config", "--global", "core.sshCommand", fmt.Sprintf("ssh -i %s -F /dev/null", ed25519KeyPath)},
+			},
 		},
 		{
-			name: "Switch to existing account with local config",
+			name: "Switch to existing account with local config prefers ed25519",
 			args: []string{"use", "test-account", "--local"},
-			setup: func() {
-				// Ensure the test account exists in the config
-				config := multigit.LoadConfig()
-				config.Accounts["test-account"] = multigit.Account{
-					Name:  "Test User",
-					Email: "test@example.com",
-				}
-				require.NoError(t, multigit.SaveConfig(config))
+			setup: func(t *testing.T) {
+				writeConfig(t, true)
+				removeIfExists(t, ed25519KeyPath)
+				removeIfExists(t, rsaKeyPath)
+				require.NoError(t, os.WriteFile(ed25519KeyPath, []byte("dummy ed key"), 0o600))
+				require.NoError(t, os.WriteFile(rsaKeyPath, []byte("dummy rsa key"), 0o600))
 			},
-			local:       true,
-			expectCmds:  4, // Expect 4 git config commands for local config
-			expectError: false,
+			expectedCommands: [][]string{
+				{"config", "user.name", baseAccount.Name},
+				{"config", "user.email", baseAccount.Email},
+				{"config", "push.default", "current"},
+				{"config", "core.sshCommand", fmt.Sprintf("ssh -i %s -F /dev/null", ed25519KeyPath)},
+			},
+		},
+		{
+			name: "Switch to existing account falls back to RSA key",
+			args: []string{"use", "test-account"},
+			setup: func(t *testing.T) {
+				writeConfig(t, true)
+				removeIfExists(t, ed25519KeyPath)
+				removeIfExists(t, rsaKeyPath)
+				require.NoError(t, os.WriteFile(rsaKeyPath, []byte("dummy rsa key"), 0o600))
+			},
+			expectedCommands: [][]string{
+				{"config", "--global", "user.name", baseAccount.Name},
+				{"config", "--global", "user.email", baseAccount.Email},
+				{"config", "--global", "url.ssh://git@github.com/.insteadOf", "https://github.com/"},
+				{"config", "--global", "push.default", "current"},
+				{"config", "--global", "core.sshCommand", fmt.Sprintf("ssh -i %s -F /dev/null", rsaKeyPath)},
+			},
 		},
 		{
 			name: "Non-existent account",
 			args: []string{"use", "nonexistent"},
-			setup: func() {
-				// Ensure the test account does not exist in the config
-				config := multigit.LoadConfig()
-				delete(config.Accounts, "nonexistent")
-				require.NoError(t, multigit.SaveConfig(config))
+			setup: func(t *testing.T) {
+				writeConfig(t, false)
+				removeIfExists(t, ed25519KeyPath)
+				removeIfExists(t, rsaKeyPath)
 			},
-			local:       false,
-			expectCmds:  0, // Expect no git commands
 			expectError: true,
 			errMsg:      "account 'nonexistent' does not exist",
 		},
@@ -167,54 +173,38 @@ func TestUseCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Run test setup if provided
 			if tt.setup != nil {
-				tt.setup()
+				tt.setup(t)
 			}
 
-			// Save and restore working directory
-			oldDir, _ := os.Getwd()
-			t.Cleanup(func() { os.Chdir(oldDir) })
-
-			// Change to a temporary directory
+			oldDir, err := os.Getwd()
+			require.NoError(t, err)
 			tempDir := t.TempDir()
-			os.Chdir(tempDir)
+			require.NoError(t, os.Chdir(tempDir))
+			t.Cleanup(func() { _ = os.Chdir(oldDir) })
 
-			// Reset viper for each test case
 			viper.Reset()
 			viper.SetConfigFile(testConfigPath)
 			require.NoError(t, viper.ReadInConfig())
 
-			// Reset command tracking
 			tuc.gitCommands = nil
 
-			// Execute the command with the test arguments
+			useCobraCmd, _, err := cmd.RootCmd.Find([]string{"use"})
+			require.NoError(t, err)
+			require.NoError(t, useCobraCmd.Flags().Set("local", "false"))
+
 			cmd.RootCmd.SetArgs(tt.args)
-			err := cmd.RootCmd.Execute()
+			err = cmd.RootCmd.Execute()
 
-			t.Logf("Git commands executed: %v", tuc.gitCommands)
-
-			// Verify the correct git commands were called
-			if !tt.expectError {
-				// Verify that git config was called with the correct arguments
-				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
-				// Verify all commands are 'config' commands
-				for _, cmd := range tuc.gitCommands {
-					assert.Equal(t, "config", cmd, "Expected 'config' command, got %s", cmd)
-				}
-			} else {
-				// Verify no git commands were called
-				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
-			}
-
-			// Verify results
 			if tt.expectError {
 				assert.Error(t, err, "Expected an error")
 				if tt.errMsg != "" {
 					assert.Contains(t, err.Error(), tt.errMsg, "Error message should contain expected text")
 				}
+				assert.Empty(t, tuc.gitCommands, "Expected no git commands")
 			} else {
 				assert.NoError(t, err, "Unexpected error")
+				assert.Equal(t, tt.expectedCommands, tuc.gitCommands, "Unexpected git commands executed")
 			}
 		})
 	}
