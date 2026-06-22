@@ -379,6 +379,105 @@ func AddSSHKeyToAgent(accountOrKeyFile string) error {
 	return nil
 }
 
+// RemoveSSHKeyFromAgent removes SSH keys from the SSH agent.
+// If accountOrKeyFile is empty, all keys will be removed (-D).
+// Otherwise it will attempt to resolve the provided account name or key file and
+// remove matching keys using "ssh-add -d".
+func RemoveSSHKeyFromAgent(accountOrKeyFile string) error {
+	if os.Getenv("SSH_AUTH_SOCK") == "" {
+		return fmt.Errorf("SSH agent is not running. Please start the SSH agent and try again")
+	}
+
+	if strings.TrimSpace(accountOrKeyFile) == "" {
+		cmd := ExecCommand("ssh-add", "-D")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to remove keys from SSH agent: %s - %v", strings.TrimSpace(string(output)), err)
+		}
+
+		fmt.Printf("✅ Removed all SSH keys from SSH agent\n")
+		return nil
+	}
+
+	var candidatePaths []string
+	if filepath.IsAbs(accountOrKeyFile) || strings.HasPrefix(accountOrKeyFile, ".") || strings.Contains(accountOrKeyFile, "/") {
+		absKeyPath, err := filepath.Abs(accountOrKeyFile)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for key file: %w", err)
+		}
+		candidatePaths = append(candidatePaths, absKeyPath)
+	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+
+		sshDir := filepath.Join(homeDir, ".ssh")
+		accountBase := filepath.Base(accountOrKeyFile)
+
+		possibleNames := []string{
+			fmt.Sprintf("id_ed25519_%s", accountOrKeyFile),
+			fmt.Sprintf("id_ed25519_%s", accountBase),
+			fmt.Sprintf("id_rsa_%s", accountOrKeyFile),
+			fmt.Sprintf("id_rsa_%s", accountBase),
+		}
+
+		seen := make(map[string]struct{})
+		for _, name := range possibleNames {
+			if name == "" {
+				continue
+			}
+
+			keyPath := filepath.Join(sshDir, name)
+			if _, ok := seen[keyPath]; ok {
+				continue
+			}
+			seen[keyPath] = struct{}{}
+			candidatePaths = append(candidatePaths, keyPath)
+		}
+	}
+
+	existingPaths := make([]string, 0, len(candidatePaths))
+	for _, path := range candidatePaths {
+		absKeyPath, err := filepath.Abs(path)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for key file: %w", err)
+		}
+
+		if _, err := os.Stat(absKeyPath); err == nil {
+			existingPaths = append(existingPaths, absKeyPath)
+		}
+	}
+
+	if len(existingPaths) == 0 {
+		return fmt.Errorf("no SSH key files found for %s", accountOrKeyFile)
+	}
+
+	var lastErr error
+	removedAny := false
+	for _, keyPath := range existingPaths {
+		cmd := ExecCommand("ssh-add", "-d", keyPath)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			lastErr = fmt.Errorf("failed to remove key %s from SSH agent: %s - %v", keyPath, strings.TrimSpace(string(output)), err)
+			continue
+		}
+
+		removedAny = true
+		fmt.Printf("✅ SSH key %s removed from SSH agent\n", keyPath)
+	}
+
+	if removedAny {
+		return nil
+	}
+
+	if lastErr != nil {
+		return lastErr
+	}
+
+	return fmt.Errorf("failed to remove SSH key(s) for %s from SSH agent", accountOrKeyFile)
+}
+
 // AddSSHConfigEntry adds an entry to the SSH config file
 func AddSSHConfigEntry(accountName string) error {
 	homeDir, err := os.UserHomeDir()

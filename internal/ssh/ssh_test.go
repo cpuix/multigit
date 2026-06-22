@@ -57,6 +57,23 @@ func mockCommand(command string, success bool) ssh.CommandRunner {
 	}
 }
 
+func mockCommandWithArgs(t *testing.T, expectedArgs []string, success bool) ssh.CommandRunner {
+	return func(name string, arg ...string) *exec.Cmd {
+		require.Equal(t, "ssh-add", name)
+		require.Equal(t, expectedArgs, arg)
+
+		cs := []string{"-test.run=TestHelperProcess", "--", "ssh-add"}
+		if success {
+			cs = append(cs, "success")
+		} else {
+			cs = append(cs, "fail")
+		}
+		cmd := exec.Command(os.Args[0], cs...)
+		cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
+		return cmd
+	}
+}
+
 // TestHelperProcess is used to mock exec.Command
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
@@ -1017,6 +1034,101 @@ func TestAddSSHKeyToAgent(t *testing.T) {
 			if tc.expectedError != "" {
 				require.Error(t, err, "Expected error but got none")
 				assert.Contains(t, err.Error(), tc.expectedError, "Error message should contain expected text")
+			} else {
+				require.NoError(t, err, "Unexpected error")
+			}
+		})
+	}
+}
+
+func TestRemoveSSHKeyFromAgent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", oldHome)
+
+	sshDir := filepath.Join(tempDir, ".ssh")
+	require.NoError(t, os.MkdirAll(sshDir, 0700), "Failed to create .ssh directory")
+
+	accountName := "test-agent-account"
+	keyFile := filepath.Join(sshDir, "id_ed25519_"+accountName)
+
+	oldExecCommand := ssh.ExecCommand
+	defer func() { ssh.ExecCommand = oldExecCommand }()
+
+	oldSSHAuthSock := os.Getenv("SSH_AUTH_SOCK")
+	defer os.Setenv("SSH_AUTH_SOCK", oldSSHAuthSock)
+	os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
+
+	tests := []struct {
+		name          string
+		setup         func()
+		expectedError string
+	}{
+		{
+			name: "Successfully remove key from agent",
+			setup: func() {
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				require.NoError(t, err, "Failed to generate test key")
+				keyData := ssh.MarshalED25519PrivateKey(privKey, "test@example.com")
+				require.NoError(t, os.WriteFile(keyFile, keyData, 0600), "Failed to write test key")
+
+				ssh.ExecCommand = mockCommandWithArgs(t, []string{"-d", keyFile}, true)
+			},
+			expectedError: "",
+		},
+		{
+			name: "Key file does not exist",
+			setup: func() {
+				os.Remove(keyFile)
+				ssh.ExecCommand = func(name string, arg ...string) *exec.Cmd {
+					t.Fatal("ssh-add should not be called when key file doesn't exist")
+					return exec.Command("true")
+				}
+			},
+			expectedError: "no SSH key files found",
+		},
+		{
+			name: "SSH agent not running",
+			setup: func() {
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				require.NoError(t, err, "Failed to generate test key")
+				keyData := ssh.MarshalED25519PrivateKey(privKey, "test@example.com")
+				require.NoError(t, os.WriteFile(keyFile, keyData, 0600), "Failed to write test key")
+
+				os.Unsetenv("SSH_AUTH_SOCK")
+			},
+			expectedError: "SSH agent is not running",
+		},
+		{
+			name: "SSH remove command fails",
+			setup: func() {
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				require.NoError(t, err, "Failed to generate test key")
+				keyData := ssh.MarshalED25519PrivateKey(privKey, "test@example.com")
+				require.NoError(t, os.WriteFile(keyFile, keyData, 0600), "Failed to write test key")
+
+				ssh.ExecCommand = mockCommandWithArgs(t, []string{"-d", keyFile}, false)
+
+				os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
+			},
+			expectedError: "failed to remove key",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Setenv("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock")
+			os.Remove(keyFile)
+
+			tc.setup()
+
+			err := ssh.RemoveSSHKeyFromAgent(accountName)
+
+			if tc.expectedError != "" {
+				require.Error(t, err, "Expected error but got none")
+				assert.Contains(t, err.Error(), tc.expectedError, "Error should mention expected text")
 			} else {
 				require.NoError(t, err, "Unexpected error")
 			}
