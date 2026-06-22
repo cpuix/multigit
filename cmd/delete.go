@@ -38,6 +38,8 @@ This will:
 			}
 		}
 
+		fmt.Printf("Attempting to remove SSH key for '%s' from the SSH agent and clean up configuration...\n", accountName)
+
 		// Delete the account
 		if err := multigit.DeleteAccount(accountName); err != nil {
 			return fmt.Errorf("failed to delete account: %w", err)

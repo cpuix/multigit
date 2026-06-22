@@ -16,6 +16,10 @@ type SSHOperations interface {
 	// AddSSHKeyToAgent adds an SSH key to the agent. If keyFile is provided, it will be used directly.
 	// Otherwise, it will look for the key in ~/.ssh/id_ed25519_{accountName}
 	AddSSHKeyToAgent(accountOrKeyFile string) error
+	// RemoveSSHKeyFromAgent removes an SSH key from the running SSH agent. When an account name is
+	// provided, the default key locations will be checked. If a key file path is supplied directly it
+	// will be used as-is. Passing an empty string removes all keys from the agent.
+	RemoveSSHKeyFromAgent(accountOrKeyFile string) error
 	AddSSHConfigEntry(accountName string) error
 	DeleteSSHKey(accountName string) error
 	RemoveSSHConfigEntry(accountName string) error
@@ -33,6 +37,11 @@ func (d *DefaultSSH) CreateSSHKey(accountName, email, passphrase string, keyType
 // accountOrKeyFile can be either an account name or a direct path to the private key file
 func (d *DefaultSSH) AddSSHKeyToAgent(accountOrKeyFile string) error {
 	return AddSSHKeyToAgent(accountOrKeyFile)
+}
+
+// RemoveSSHKeyFromAgent removes the SSH key from the SSH agent
+func (d *DefaultSSH) RemoveSSHKeyFromAgent(accountOrKeyFile string) error {
+	return RemoveSSHKeyFromAgent(accountOrKeyFile)
 }
 
 // AddSSHConfigEntry adds an entry to the SSH config file

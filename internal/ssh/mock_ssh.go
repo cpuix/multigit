@@ -19,6 +19,12 @@ func (m *MockSSH) AddSSHKeyToAgent(accountName string) error {
 	return args.Error(0)
 }
 
+// RemoveSSHKeyFromAgent mocks the RemoveSSHKeyFromAgent function
+func (m *MockSSH) RemoveSSHKeyFromAgent(accountOrKeyFile string) error {
+	args := m.Called(accountOrKeyFile)
+	return args.Error(0)
+}
+
 // AddSSHConfigEntry mocks the AddSSHConfigEntry function
 func (m *MockSSH) AddSSHConfigEntry(accountName string) error {
 	args := m.Called(accountName)

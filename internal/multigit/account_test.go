@@ -45,6 +45,11 @@ func (m *MockSSH) AddSSHConfigEntry(accountName string) error {
 	return args.Error(0)
 }
 
+func (m *MockSSH) RemoveSSHKeyFromAgent(accountOrKeyFile string) error {
+	args := m.Called(accountOrKeyFile)
+	return args.Error(0)
+}
+
 func (m *MockSSH) DeleteSSHKey(accountName string) error {
 	args := m.Called(accountName)
 	return args.Error(0)
@@ -713,6 +718,7 @@ func TestDeleteAccount(t *testing.T) {
 				multigit.SSHClient = mockSSH
 				
 				// Mock the SSH operations
+				mockSSH.On("RemoveSSHKeyFromAgent", "test-account").Return(nil)
 				mockSSH.On("DeleteSSHKey", "test-account").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "test-account").Return(nil)
 			},
@@ -764,6 +770,7 @@ func TestDeleteAccount(t *testing.T) {
 				multigit.SSHClient = mockSSH
 				
 				// Mock the SSH operations with an error for DeleteSSHKey
+				mockSSH.On("RemoveSSHKeyFromAgent", "test-account-ssh-error").Return(nil)
 				mockSSH.On("DeleteSSHKey", "test-account-ssh-error").Return(fmt.Errorf("SSH key deletion error"))
 				mockSSH.On("RemoveSSHConfigEntry", "test-account-ssh-error").Return(nil)
 			},
@@ -793,6 +800,7 @@ func TestDeleteAccount(t *testing.T) {
 				multigit.SSHClient = mockSSH
 				
 				// Mock the SSH operations with an error for RemoveSSHConfigEntry
+				mockSSH.On("RemoveSSHKeyFromAgent", "test-account-config-error").Return(nil)
 				mockSSH.On("DeleteSSHKey", "test-account-config-error").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "test-account-config-error").Return(fmt.Errorf("SSH config removal error"))
 			},
@@ -822,6 +830,7 @@ func TestDeleteAccount(t *testing.T) {
 				multigit.SSHClient = mockSSH
 				
 				// Mock the SSH operations
+				mockSSH.On("RemoveSSHKeyFromAgent", "active-account").Return(nil)
 				mockSSH.On("DeleteSSHKey", "active-account").Return(nil)
 				mockSSH.On("RemoveSSHConfigEntry", "active-account").Return(nil)
 			},

@@ -154,6 +154,7 @@ func TestFullWorkflow(t *testing.T) {
 	// Step 4: Delete the account
 	t.Run("Step4_DeleteAccount", func(t *testing.T) {
 		// Setup mock expectations for delete command
+		mockSSH.On("RemoveSSHKeyFromAgent", "test-account").Return(nil)
 		mockSSH.On("DeleteSSHKey", "test-account").Return(nil)
 		mockSSH.On("RemoveSSHConfigEntry", "test-account").Return(nil)
 
