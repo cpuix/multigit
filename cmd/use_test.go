@@ -14,14 +14,15 @@ import (
 
 // testUseCommand is a test helper that sets up the test environment for the use command
 type testUseCommand struct {
-	gitCommands []string
+	gitCommands [][]string
 	isGitRepo   bool
 	t           *testing.T
 }
 
 // mockRunGitCommand mocks the RunGitCommand function for testing
 func (tuc *testUseCommand) mockRunGitCommand(args ...string) error {
-	tuc.gitCommands = append(tuc.gitCommands, args[0])
+	copied := append([]string(nil), args...)
+	tuc.gitCommands = append(tuc.gitCommands, copied)
 	tuc.t.Logf("git command: %v", args)
 	return nil
 }
@@ -35,8 +36,6 @@ func (tuc *testUseCommand) mockIsGitRepo() bool {
 // save original functions for restoration
 var originalRunGitCommand = cmd.RunGitCommand
 var originalIsGitRepo = cmd.IsGitRepo
-
-
 
 // TestUseCommand tests the use command
 func TestUseCommand(t *testing.T) {
@@ -77,8 +76,8 @@ func TestUseCommand(t *testing.T) {
 	sshDir := filepath.Join(tempDir, ".ssh")
 	require.NoError(t, os.MkdirAll(sshDir, 0700))
 
-	// Create a test SSH key
-	testSSHKeyPath := filepath.Join(sshDir, "id_rsa_test-account")
+	// Create a test SSH key (ED25519 is the default key type)
+	testSSHKeyPath := filepath.Join(sshDir, "id_ed25519_test-account")
 	require.NoError(t, os.WriteFile(testSSHKeyPath, []byte("dummy key"), 0600))
 
 	// Initialize a new config
@@ -116,6 +115,7 @@ func TestUseCommand(t *testing.T) {
 		expectCmds  int
 		expectError bool
 		errMsg      string
+		repoReady   bool
 	}{
 		{
 			name: "Switch to existing account",
@@ -132,6 +132,7 @@ func TestUseCommand(t *testing.T) {
 			local:       false,
 			expectCmds:  5, // Expect 5 git config commands for global config
 			expectError: false,
+			repoReady:   true,
 		},
 		{
 			name: "Switch to existing account with local config",
@@ -146,8 +147,26 @@ func TestUseCommand(t *testing.T) {
 				require.NoError(t, multigit.SaveConfig(config))
 			},
 			local:       true,
-			expectCmds:  4, // Expect 4 git config commands for local config
+			expectCmds:  3, // Expect 3 git config commands for local config
 			expectError: false,
+			repoReady:   true,
+		},
+		{
+			name: "Local config outside repository",
+			args: []string{"use", "test-account", "--local"},
+			setup: func() {
+				config := multigit.LoadConfig()
+				config.Accounts["test-account"] = multigit.Account{
+					Name:  "Test User",
+					Email: "test@example.com",
+				}
+				require.NoError(t, multigit.SaveConfig(config))
+			},
+			local:       true,
+			expectCmds:  0,
+			expectError: true,
+			errMsg:      "requires running inside a git repository",
+			repoReady:   false,
 		},
 		{
 			name: "Non-existent account",
@@ -162,6 +181,7 @@ func TestUseCommand(t *testing.T) {
 			expectCmds:  0, // Expect no git commands
 			expectError: true,
 			errMsg:      "account 'nonexistent' does not exist",
+			repoReady:   true,
 		},
 	}
 
@@ -188,6 +208,9 @@ func TestUseCommand(t *testing.T) {
 			// Reset command tracking
 			tuc.gitCommands = nil
 
+			// Control repo detection
+			tuc.isGitRepo = tt.repoReady
+
 			// Execute the command with the test arguments
 			cmd.RootCmd.SetArgs(tt.args)
 			err := cmd.RootCmd.Execute()
@@ -199,9 +222,21 @@ func TestUseCommand(t *testing.T) {
 				// Verify that git config was called with the correct arguments
 				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))
 				// Verify all commands are 'config' commands
-				for _, cmd := range tuc.gitCommands {
-					assert.Equal(t, "config", cmd, "Expected 'config' command, got %s", cmd)
+				for _, cmdArgs := range tuc.gitCommands {
+					assert.NotEmpty(t, cmdArgs)
+					assert.Equal(t, "config", cmdArgs[0], "Expected 'config' command, got %s", cmdArgs[0])
 				}
+
+				// Verify scope of core.sshCommand setting
+				lastCmd := tuc.gitCommands[len(tuc.gitCommands)-1]
+				require.GreaterOrEqual(t, len(lastCmd), 4)
+				assert.Equal(t, "core.sshCommand", lastCmd[2], "Expected core.sshCommand to be configured")
+				if tt.local {
+					assert.Equal(t, "--local", lastCmd[1], "Local config should use --local scope")
+				} else {
+					assert.Equal(t, "--global", lastCmd[1], "Global config should use --global scope")
+				}
+				assert.Contains(t, lastCmd[3], "id_ed25519_test-account", "SSH command should reference the account key path")
 			} else {
 				// Verify no git commands were called
 				assert.Equal(t, tt.expectCmds, len(tuc.gitCommands), "Expected %d git commands, got %d", tt.expectCmds, len(tuc.gitCommands))

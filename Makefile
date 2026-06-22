@@ -35,7 +35,7 @@ lint:
 
 # Build the binary
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./cmd/multigit
+        $(GOBUILD) -o $(BINARY_NAME) -v ./
 
 # Install dependencies
 deps:

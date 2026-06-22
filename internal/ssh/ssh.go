@@ -31,6 +31,62 @@ const (
 	// ED25519 keys are always 256 bits (32 bytes) when using the standard implementation
 )
 
+// KeyInfo describes an SSH private key on disk
+type KeyInfo struct {
+	Path   string
+	Type   KeyType
+	Exists bool
+}
+
+// DefaultKeyPath returns the default key path for the given account and key type.
+func DefaultKeyPath(accountName string, keyType KeyType) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	sanitized := filepath.Base(accountName)
+	if sanitized == "." || sanitized == "" {
+		sanitized = accountName
+	}
+
+	var fileName string
+	switch keyType {
+	case KeyTypeRSA:
+		fileName = fmt.Sprintf("id_rsa_%s", sanitized)
+	case KeyTypeED25519, "":
+		fileName = fmt.Sprintf("id_ed25519_%s", sanitized)
+	default:
+		return "", fmt.Errorf("unsupported key type: %s", keyType)
+	}
+
+	return filepath.Join(homeDir, ".ssh", fileName), nil
+}
+
+// ResolveKeyPath tries to find an existing SSH key for the given account.
+// It prefers ED25519 keys but falls back to RSA if necessary. When no key
+// is found, it returns the default ED25519 path with Exists set to false.
+func ResolveKeyPath(accountName string) (*KeyInfo, error) {
+	edPath, err := DefaultKeyPath(accountName, KeyTypeED25519)
+	if err != nil {
+		return nil, err
+	}
+	rsaPath, err := DefaultKeyPath(accountName, KeyTypeRSA)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(edPath); err == nil {
+		return &KeyInfo{Path: edPath, Type: KeyTypeED25519, Exists: true}, nil
+	}
+
+	if _, err := os.Stat(rsaPath); err == nil {
+		return &KeyInfo{Path: rsaPath, Type: KeyTypeRSA, Exists: true}, nil
+	}
+
+	return &KeyInfo{Path: edPath, Type: KeyTypeED25519, Exists: false}, nil
+}
+
 // MarshalED25519PrivateKey converts an ED25519 private key to OpenSSH format
 func MarshalED25519PrivateKey(key ed25519.PrivateKey, comment string) []byte {
 	// The public key is the last 32 bytes of the private key
@@ -145,24 +201,17 @@ func CreateSSHKey(accountName, accountEmail, keyFile string, keyType KeyType) er
 
 	// If keyFile is not provided, use default location in .ssh directory
 	if keyFile == "" {
-		homeDir, err := os.UserHomeDir()
+		defaultPath, err := DefaultKeyPath(accountName, keyType)
 		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
+			return err
 		}
 
 		// Create .ssh directory if it doesn't exist
-		sshDir := filepath.Join(homeDir, ".ssh")
-		if err := os.MkdirAll(sshDir, 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(defaultPath), 0700); err != nil {
 			return fmt.Errorf("failed to create .ssh directory: %w", err)
 		}
 
-		// Generate default key file path based on key type
-		switch keyType {
-		case KeyTypeRSA:
-			keyFile = filepath.Join(sshDir, fmt.Sprintf("id_rsa_%s", accountName))
-		case KeyTypeED25519:
-			keyFile = filepath.Join(sshDir, fmt.Sprintf("id_ed25519_%s", accountName))
-		}
+		keyFile = defaultPath
 	} else {
 		// Ensure parent directory exists
 		parentDir := filepath.Dir(keyFile)
@@ -291,12 +340,15 @@ func AddSSHKeyToAgent(accountOrKeyFile string) error {
 	if filepath.IsAbs(accountOrKeyFile) || strings.HasPrefix(accountOrKeyFile, ".") || strings.Contains(accountOrKeyFile, "/") {
 		privateKeyFile = accountOrKeyFile
 	} else {
-		// Otherwise, treat it as an account name and look for the key in the default location
-		homeDir, err := os.UserHomeDir()
+		// Otherwise, treat it as an account name and look for an existing key
+		keyInfo, err := ResolveKeyPath(accountOrKeyFile)
 		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
+			return fmt.Errorf("failed to resolve key path: %w", err)
 		}
-		privateKeyFile = filepath.Join(homeDir, ".ssh", fmt.Sprintf("id_ed25519_%s", accountOrKeyFile))
+		if !keyInfo.Exists {
+			return fmt.Errorf("private key file %s does not exist", keyInfo.Path)
+		}
+		privateKeyFile = keyInfo.Path
 	}
 
 	// Convert to absolute path for consistent error messages
@@ -336,18 +388,14 @@ func AddSSHConfigEntry(accountName string) error {
 
 	sshConfigFile := filepath.Join(homeDir, ".ssh", "config")
 
-	// Check for both RSA and ED25519 key files
-	rsaKeyFile := filepath.Join(homeDir, ".ssh", fmt.Sprintf("id_rsa_%s", accountName))
-	ed25519KeyFile := filepath.Join(homeDir, ".ssh", fmt.Sprintf("id_ed25519_%s", accountName))
-
-	var privateKeyFile string
-	if _, err := os.Stat(rsaKeyFile); err == nil {
-		privateKeyFile = rsaKeyFile
-	} else if _, err := os.Stat(ed25519KeyFile); err == nil {
-		privateKeyFile = ed25519KeyFile
-	} else {
-		return fmt.Errorf("no SSH key found for account %s", accountName)
+	keyInfo, err := ResolveKeyPath(accountName)
+	if err != nil {
+		return fmt.Errorf("failed to resolve key path: %w", err)
 	}
+	if !keyInfo.Exists {
+		return fmt.Errorf("no SSH key found for account %s (expected at %s)", accountName, keyInfo.Path)
+	}
+	privateKeyFile := keyInfo.Path
 
 	// Read existing config with atomic operation
 	var configData []byte

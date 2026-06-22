@@ -9,7 +9,7 @@ import (
 
 	"github.com/cpuix/multigit/cmd"
 	"github.com/cpuix/multigit/internal/multigit"
-	"github.com/spf13/cobra"
+	"github.com/cpuix/multigit/internal/ssh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,60 +37,35 @@ func TestStatusCommand(t *testing.T) {
 	}()
 
 	t.Run("NoActiveAccount", func(t *testing.T) {
-		// Save original stdout and restore it after the test
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 		defer func() { os.Stdout = oldStdout }()
 
-		// Create a config with no active account
 		config := multigit.NewConfig()
 		err := multigit.SaveConfigToFile(config, configPath)
 		require.NoError(t, err, "Failed to save config")
 
-		// Initialize config
 		cmd.InitConfig()
 
-		// Create a fresh command for testing
-		rootCmd := &cobra.Command{Use: "multigit"}
-		statusCmd := &cobra.Command{
-			Use:   "status",
-			Short: "Show the currently active GitHub account",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				// Get active account
-				_, _, err := multigit.GetActiveAccount()
-				if err != nil {
-					io.WriteString(w, "No active GitHub account. Use 'multigit use <account>' to set an active account.\n")
-					return nil
-				}
-				return nil
-			},
-		}
-		rootCmd.AddCommand(statusCmd)
-
-		// Execute the status command
-		rootCmd.SetArgs([]string{"status"})
-		err = rootCmd.Execute()
+		cmd.RootCmd.SetArgs([]string{"status"})
+		err = cmd.RootCmd.Execute()
 		require.NoError(t, err, "Command execution failed")
 
-		// Read command output
 		w.Close()
 		var buf bytes.Buffer
 		io.Copy(&buf, r)
 		output := buf.String()
 
-		// Verify output contains expected message
 		assert.Contains(t, output, "No active GitHub account", "Output should indicate no active account")
 	})
 
 	t.Run("WithActiveAccount", func(t *testing.T) {
-		// Save original stdout and restore it after the test
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 		defer func() { os.Stdout = oldStdout }()
 
-		// Create a config with an active account
 		config := multigit.NewConfig()
 		config.Accounts = map[string]multigit.Account{
 			"test-account": {
@@ -102,48 +77,27 @@ func TestStatusCommand(t *testing.T) {
 		err := multigit.SaveConfigToFile(config, configPath)
 		require.NoError(t, err, "Failed to save config")
 
-		// Initialize config
+		// Ensure the SSH key path exists so the command reports it as present
+		keyInfo, err := ssh.ResolveKeyPath("test-account")
+		require.NoError(t, err, "Failed to resolve key path")
+		require.NoError(t, os.MkdirAll(filepath.Dir(keyInfo.Path), 0700))
+		require.NoError(t, os.WriteFile(keyInfo.Path, []byte("test-key"), 0600))
+
 		cmd.InitConfig()
 
-		// Create a fresh command for testing
-		rootCmd := &cobra.Command{Use: "multigit"}
-		statusCmd := &cobra.Command{
-			Use:   "status",
-			Short: "Show the currently active GitHub account",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				// Get active account
-				activeAccountName, account, err := multigit.GetActiveAccount()
-				if err != nil {
-					io.WriteString(w, "No active GitHub account. Use 'multigit use <account>' to set an active account.\n")
-					return nil
-				}
-
-				// Print active account info
-				io.WriteString(w, "Active GitHub account:\n")
-				io.WriteString(w, "  Name:  "+activeAccountName+"\n")
-				io.WriteString(w, "  Email: "+account.Email+"\n")
-				io.WriteString(w, "  SSH Key: ~/.ssh/id_ed25519_"+activeAccountName+"\n")
-
-				return nil
-			},
-		}
-		rootCmd.AddCommand(statusCmd)
-
-		// Execute the status command
-		rootCmd.SetArgs([]string{"status"})
-		err = rootCmd.Execute()
+		cmd.RootCmd.SetArgs([]string{"status"})
+		err = cmd.RootCmd.Execute()
 		require.NoError(t, err, "Command execution failed")
 
-		// Read command output
 		w.Close()
 		var buf bytes.Buffer
 		io.Copy(&buf, r)
 		output := buf.String()
 
-		// Verify output contains expected account information
 		assert.Contains(t, output, "Active GitHub account", "Output should indicate an active account")
 		assert.Contains(t, output, "test-account", "Output should contain the account name")
 		assert.Contains(t, output, "test@example.com", "Output should contain the account email")
-		assert.Contains(t, output, "SSH Key", "Output should mention the SSH key")
+		assert.Contains(t, output, keyInfo.Path, "Output should mention the SSH key path")
+		assert.Contains(t, output, string(ssh.KeyTypeED25519), "Output should mention the key type")
 	})
 }

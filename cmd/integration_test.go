@@ -44,13 +44,18 @@ func TestFullWorkflow(t *testing.T) {
 
 	// Create a mock SSH implementation
 	mockSSH := new(MockSSH)
-	
+
 	// Save original SSH client
 	oldSSHClient := multigit.SSHClient
+	oldAddToAgent := cmd.SSHAddToAgentFunc
+	cmd.SSHAddToAgentFunc = func(accountName string) error { return nil }
 	// Replace with our mock
 	multigit.SSHClient = mockSSH
 	// Restore original client after test
-	defer func() { multigit.SSHClient = oldSSHClient }()
+	defer func() {
+		multigit.SSHClient = oldSSHClient
+		cmd.SSHAddToAgentFunc = oldAddToAgent
+	}()
 
 	// Initialize config
 	cmd.InitConfig()
@@ -84,6 +89,11 @@ func TestFullWorkflow(t *testing.T) {
 		account, exists := config.Accounts["test-account"]
 		assert.True(t, exists, "Account should exist in config")
 		assert.Equal(t, "test@example.com", account.Email, "Account email should match")
+
+		keyInfo, err := ssh.ResolveKeyPath("test-account")
+		require.NoError(t, err, "Failed to resolve key path")
+		require.NoError(t, os.MkdirAll(filepath.Dir(keyInfo.Path), 0700))
+		require.NoError(t, os.WriteFile(keyInfo.Path, []byte("test-key"), 0600))
 	})
 
 	// For this integration test, we'll skip the actual git command execution
@@ -200,13 +210,18 @@ func TestErrorConditions(t *testing.T) {
 
 	// Create a mock SSH implementation
 	mockSSH := new(MockSSH)
-	
+
 	// Save original SSH client
 	oldSSHClient := multigit.SSHClient
+	oldAddToAgent := cmd.SSHAddToAgentFunc
+	cmd.SSHAddToAgentFunc = func(accountName string) error { return nil }
 	// Replace with our mock
 	multigit.SSHClient = mockSSH
 	// Restore original client after test
-	defer func() { multigit.SSHClient = oldSSHClient }()
+	defer func() {
+		multigit.SSHClient = oldSSHClient
+		cmd.SSHAddToAgentFunc = oldAddToAgent
+	}()
 
 	// Initialize config
 	cmd.InitConfig()
@@ -215,7 +230,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("CreateAccountWithInvalidEmail", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
@@ -225,7 +240,7 @@ func TestErrorConditions(t *testing.T) {
 		// Execute create command with invalid email
 		cmd.RootCmd.SetArgs([]string{"create", "test-account", "invalid-email"})
 		err := cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer
@@ -243,7 +258,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("UseNonExistentAccount", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
@@ -253,7 +268,7 @@ func TestErrorConditions(t *testing.T) {
 		// Execute use command with non-existent account
 		cmd.RootCmd.SetArgs([]string{"use", "non-existent-account"})
 		err := cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer
@@ -270,7 +285,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("DeleteNonExistentAccount", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Capture stdout
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
@@ -280,7 +295,7 @@ func TestErrorConditions(t *testing.T) {
 		// Execute delete command with non-existent account
 		cmd.RootCmd.SetArgs([]string{"delete", "non-existent-account", "-f"})
 		err := cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer
@@ -297,7 +312,7 @@ func TestErrorConditions(t *testing.T) {
 	t.Run("CreateDuplicateAccount", func(t *testing.T) {
 		// Initialize config
 		cmd.InitConfig()
-		
+
 		// Setup mock expectations for first create
 		mockSSH.On("CreateSSHKey", "duplicate-account", "test@example.com", "", ssh.KeyTypeED25519).Return(nil)
 		mockSSH.On("AddSSHKeyToAgent", "duplicate-account").Return(nil)
@@ -317,7 +332,7 @@ func TestErrorConditions(t *testing.T) {
 		// Try to create duplicate account
 		cmd.RootCmd.SetArgs([]string{"create", "duplicate-account", "another@example.com"})
 		err = cmd.RootCmd.Execute()
-		
+
 		// Read command output (for debugging purposes)
 		w.Close()
 		var buf bytes.Buffer

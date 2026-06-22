@@ -50,7 +50,7 @@ This will:
 		}
 
 		// Set git config
-		if err := setGitConfig(account, useLocal); err != nil {
+		if err := setGitConfig(accountName, account, useLocal); err != nil {
 			return fmt.Errorf("failed to set git config: %w", err)
 		}
 
@@ -66,37 +66,42 @@ This will:
 }
 
 // setGitConfig sets the git user name and email (global or local)
-func setGitConfig(account multigit.Account, local bool) error {
-	// Prepare git config args
-	configArgs := []string{"config"}
-	if !local {
-		configArgs = append(configArgs, "--global")
+func setGitConfig(accountName string, account multigit.Account, local bool) error {
+	scope := "--global"
+	if local {
+		if !IsGitRepo() {
+			return fmt.Errorf("--local flag requires running inside a git repository")
+		}
+		scope = "--local"
 	}
 
-	// Set git config
-	if err := RunGitCommand(append(configArgs, "user.name", account.Name)...); err != nil {
+	if err := RunGitCommand("config", scope, "user.name", account.Name); err != nil {
 		return fmt.Errorf("failed to set git user name: %w", err)
 	}
 
-	if err := RunGitCommand(append(configArgs, "user.email", account.Email)...); err != nil {
+	if err := RunGitCommand("config", scope, "user.email", account.Email); err != nil {
 		return fmt.Errorf("failed to set git email: %w", err)
 	}
 
-	// Only set URL rewrite for global config
 	if !local {
-		if err := RunGitCommand(append(configArgs, "url.ssh://git@github.com/.insteadOf", "https://github.com/")...); err != nil {
+		if err := RunGitCommand("config", "--global", "url.ssh://git@github.com/.insteadOf", "https://github.com/"); err != nil {
 			return fmt.Errorf("failed to set git URL rewrite: %w", err)
+		}
+		if err := RunGitCommand("config", "--global", "push.default", "current"); err != nil {
+			return fmt.Errorf("failed to set git push.default: %w", err)
 		}
 	}
 
-	// Set push default to current
-	if err := RunGitCommand("config", "--global", "push.default", "current"); err != nil {
-		return fmt.Errorf("failed to set git push.default: %w", err)
+	keyInfo, err := ssh.ResolveKeyPath(accountName)
+	if err != nil {
+		return fmt.Errorf("failed to determine SSH key path: %w", err)
+	}
+	if !keyInfo.Exists {
+		return fmt.Errorf("ssh key for account '%s' not found at %s", account.Name, keyInfo.Path)
 	}
 
-	// Set github.com to use the correct SSH key
-	sshCommand := fmt.Sprintf("ssh -i ~/.ssh/id_rsa_%s -F /dev/null", account.Name)
-	if err := RunGitCommand("config", "--global", "core.sshCommand", sshCommand); err != nil {
+	sshCommand := fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -F /dev/null", keyInfo.Path)
+	if err := RunGitCommand("config", scope, "core.sshCommand", sshCommand); err != nil {
 		return fmt.Errorf("failed to set git core.sshCommand: %w", err)
 	}
 
