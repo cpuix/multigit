@@ -25,6 +25,9 @@ This will:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		accountName := args[0]
 
+		// Reset force flag after command execution to avoid state leakage between runs
+		defer func() { forceDelete = false }()
+
 		// Confirm before deleting
 		if !forceDelete {
 			fmt.Printf("⚠️  WARNING: This will permanently delete the account '%s' and its SSH keys.\n", accountName)
