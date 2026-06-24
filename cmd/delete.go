@@ -23,6 +23,10 @@ This will:
 4. Remove the account from the multigit config`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		defer func() {
+			forceDelete = false
+		}()
+
 		accountName := args[0]
 
 		// Reset force flag after command execution to avoid state leakage between runs

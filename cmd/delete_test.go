@@ -1,6 +1,8 @@
 package cmd_test
 
 import (
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -26,11 +28,13 @@ func setupTestConfig(t *testing.T) (string, func()) {
 
 	// Create temp dir for test config
 	tempDir := t.TempDir()
-	cfgFile := filepath.Join(tempDir, "config.json")
+	cfgFile := filepath.Join(tempDir, ".config", "multigit", "config.json")
 
-	// Set config file path
+	// Set config file path and HOME
 	oldCfg := cmd.CfgFile
+	oldHome := os.Getenv("HOME")
 	cmd.CfgFile = cfgFile
+	require.NoError(t, os.Setenv("HOME", tempDir))
 
 	// Initialize config
 	cmd.InitConfig()
@@ -42,6 +46,11 @@ func setupTestConfig(t *testing.T) (string, func()) {
 
 	// Return cleanup function
 	return cfgFile, func() {
+		if oldHome == "" {
+			require.NoError(t, os.Unsetenv("HOME"))
+		} else {
+			require.NoError(t, os.Setenv("HOME", oldHome))
+		}
 		cmd.CfgFile = oldCfg
 	}
 }
@@ -98,4 +107,51 @@ func TestDeleteAccount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeleteCommandForceSkipsPrompt(t *testing.T) {
+	// Setup test config and ensure test account exists
+	_, cleanup := setupTestConfig(t)
+	defer cleanup()
+
+	config := multigit.LoadConfig()
+	setupTestAccount(t, &config)
+	require.NoError(t, multigit.SaveConfig(config), "Failed to setup test account")
+
+	// Capture stdout to verify prompt is skipped
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	// Execute delete command with force flag
+	oldStdin := os.Stdin
+	stdinReader, stdinWriter, err := os.Pipe()
+	require.NoError(t, err)
+	require.NoError(t, stdinWriter.Close())
+	os.Stdin = stdinReader
+	defer func() {
+		os.Stdin = oldStdin
+		stdinReader.Close()
+	}()
+	cmd.RootCmd.SetArgs([]string{"delete", "test-account", "--force"})
+	defer cmd.RootCmd.SetArgs([]string{})
+
+	err = cmd.RootCmd.Execute()
+	require.NoError(t, err, "Delete command with --force should succeed")
+
+	require.NoError(t, w.Close())
+	output, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
+
+	outStr := string(output)
+	assert.NotContains(t, outStr, "Are you sure you want to continue?", "Force flag should skip confirmation prompt")
+	assert.Contains(t, outStr, "deleted successfully", "Delete command should report success")
+
+	// Ensure the account was deleted
+	config = multigit.LoadConfig()
+	_, exists := config.Accounts["test-account"]
+	assert.False(t, exists, "Account should be deleted when using --force")
 }
